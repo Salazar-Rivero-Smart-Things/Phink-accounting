@@ -1,16 +1,33 @@
 @echo off
-title Starter Phinx Accounting...
-echo Starter Phinx Accounting System...
-echo [1/2] Starter Python FastAPI Backend (Port 8000)...
-start "Phinx Backend" cmd /k "cd backend && .\venv\Scripts\python -m uvicorn app.main:app --reload --port 8000"
+setlocal
+cd /d "%~dp0"
 
-echo [2/2] Starter Next.js Frontend (Port 3000)...
-start "Phinx Frontend" cmd /k "cd frontend && npm.cmd run dev"
+title Starter Phinx Accounting...
+echo ========================================================
+echo       Starter Phinx Accounting System (Enterprise)
+echo ========================================================
+echo.
+
+echo [1/3] Starter Python FastAPI Backend pa port 8000...
+start "Phinx - Backend API (Port 8000)" cmd /k "call "%~dp0backend\run.bat""
+
+echo [2/3] Starter Next.js Frontend pa port 3000...
+start "Phinx - Frontend Dashbord (Port 3000)" cmd /k "call "%~dp0frontend\run.bat""
+
+echo.
+echo Venter 3 sekunder sa serverne rekker a starte...
+ping 127.0.0.1 -n 4 >nul
+
+echo [3/3] Apner nettleseren pa http://localhost:3000 ...
+start http://localhost:3000
 
 echo.
 echo ========================================================
-echo Phinx Accounting kjorer na!
+echo Alt kjorer na!
 echo Frontend: http://localhost:3000
-echo Backend API Docs: http://localhost:8000/docs
+echo API Docs: http://localhost:8000/docs
+echo Kundeservice: Klikk pa "Kundeservice Desk" i menyen!
 echo ========================================================
+echo.
+echo (Ikke lukk de to sorte vinduene som apnet seg, de holder serverne i gang).
 pause
