@@ -1,12 +1,12 @@
 import os
 
 class Settings:
-    PROJECT_NAME: str = "Phinx Accounting"
+    PROJECT_NAME: str = "Phink Accounting"
     VERSION: str = "0.1.0"
     API_V1_STR: str = "/api"
     
     # Database
-    DATABASE_URL: str = os.getenv("DATABASE_URL", "sqlite:///./phinx_accounting.db")
+    DATABASE_URL: str = os.getenv("DATABASE_URL", "sqlite:///./phink_accounting.db")
     
     # Llama 3.1 AI Service settings
     # Default: connects to local Ollama instance (http://localhost:11434)

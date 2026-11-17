@@ -2,17 +2,17 @@
 setlocal
 cd /d "%~dp0"
 
-title Starter Phinx Accounting...
+title Starter Phink Accounting...
 echo ========================================================
-echo       Starter Phinx Accounting System (Enterprise)
+echo       Starter Phink Accounting System (Enterprise)
 echo ========================================================
 echo.
 
 echo [1/3] Starter Python FastAPI Backend pa port 8000...
-start "Phinx - Backend API (Port 8000)" cmd /k "call "%~dp0backend\run.bat""
+start "Phink - Backend API (Port 8000)" cmd /k "call "%~dp0backend\run.bat""
 
 echo [2/3] Starter Next.js Frontend pa port 3000...
-start "Phinx - Frontend Dashbord (Port 3000)" cmd /k "call "%~dp0frontend\run.bat""
+start "Phink - Frontend Dashbord (Port 3000)" cmd /k "call "%~dp0frontend\run.bat""
 
 echo.
 echo Venter 3 sekunder sa serverne rekker a starte...

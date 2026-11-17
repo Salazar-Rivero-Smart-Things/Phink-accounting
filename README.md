@@ -1,4 +1,4 @@
-# Phinx Accounting 📊🤖🎧
+# Phink Accounting 📊🤖🎧
 
 Et moderne, helhetlig regnskapssystem bygget med **dobbel bokføring**, **Meta Llama 3.1 AI-assistanse**, og en **egen integrert Kundeservicedesk (Human-in-the-Loop)** for direkte håndtering av refusjoner, betalingsfeil og kundehenvendelser.
 

@@ -108,7 +108,7 @@ export default function Home() {
   const [cfoChatHistory, setCfoChatHistory] = useState<{ sender: "user" | "cfo"; text: string }[]>([
     {
       sender: "cfo",
-      text: "Hei! Jeg er Phinx AI - din digitale CFO støttet av Llama 3.1. Hva kan jeg hjelpe deg med i regnskapet i dag?"
+      text: "Hei! Jeg er Phink AI - din digitale CFO støttet av Llama 3.1. Hva kan jeg hjelpe deg med i regnskapet i dag?"
     }
   ]);
   const [cfoLoading, setCfoLoading] = useState(false);
@@ -283,7 +283,7 @@ export default function Home() {
             </div>
             <div>
               <div className="flex items-center space-x-2">
-                <h1 className="text-xl font-bold tracking-tight text-white">Phinx Accounting</h1>
+                <h1 className="text-xl font-bold tracking-tight text-white">Phink Accounting</h1>
                 <span className="text-xs bg-cyan-950 text-cyan-400 border border-cyan-800 px-2 py-0.5 rounded-full font-medium">
                   v0.1.0 Enterprise
                 </span>
@@ -932,7 +932,7 @@ export default function Home() {
                   <Bot className="w-5 h-5" />
                 </div>
                 <div>
-                  <h3 className="font-bold text-white text-base">Phinx AI - Digital CFO</h3>
+                  <h3 className="font-bold text-white text-base">Phink AI - Digital CFO</h3>
                   <p className="text-xs text-slate-400">Koblet mot sanntidstall fra regnskapet ditt</p>
                 </div>
               </div>
@@ -1045,7 +1045,7 @@ export default function Home() {
 
       {/* Footer with Legal License Notice */}
       <footer className="border-t border-slate-800/80 bg-slate-950 py-4 text-center text-xs text-slate-500">
-        <p>Phinx Accounting • Bygget med dobbel bokføring og lokal Llama 3.1 AI • Full personvernisolasjon</p>
+        <p>Phink Accounting • Bygget med dobbel bokføring og lokal Llama 3.1 AI • Full personvernisolasjon</p>
         <p className="mt-1 text-[11px] text-slate-600">
           Llama 3.1 is licensed under the Llama 3.1 Community License, Copyright © Meta Platforms, Inc. All Rights Reserved.
         </p>

@@ -89,7 +89,7 @@ Tekst fra bilag:
         """
         Svarer på spørsmål om bedriftens økonomi basert på sanntidstall fra regnskapet.
         """
-        prompt = f"""Du er Phinx AI - Digital CFO og Økonomisk Rådgiver for bedriften.
+        prompt = f"""Du er Phink AI - Digital CFO og Økonomisk Rådgiver for bedriften.
 Her er bedriftens nåværende nøkkeltall:
 - Totale inntekter: {accounting_summary.get('total_revenue', 0.0):,.2f} NOK
 - Totale kostnader: {accounting_summary.get('total_expenses', 0.0):,.2f} NOK

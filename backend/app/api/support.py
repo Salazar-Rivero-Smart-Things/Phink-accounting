@@ -65,7 +65,7 @@ def create_support_ticket(ticket_in: SupportTicketCreate, db: Session = Depends(
     ai_msg = TicketMessage(
         ticket_id=db_ticket.id,
         sender="LLAMA_AI",
-        sender_name="Phinx Llama 3.1 AI",
+        sender_name="Phink Llama 3.1 AI",
         message=ai_text
     )
     db.add(ai_msg)
@@ -163,7 +163,7 @@ def seed_demo_support_cases(db: Session = Depends(get_db)):
         msg2 = TicketMessage(
             ticket_id=ticket.id,
             sender="LLAMA_AI",
-            sender_name="Phinx Llama 3.1 AI",
+            sender_name="Phink Llama 3.1 AI",
             message=item["ai_msg"]
         )
         db.add_all([msg1, msg2])
