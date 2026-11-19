@@ -11,6 +11,7 @@ from app.database import get_db
 from app.models.accounting import (
     CompanySetting, CustomerInvoice, Voucher, TransactionLine, SubscriptionOrder, AuditLog
 )
+from app.api.auth import is_owner_email
 
 router = APIRouter(prefix="/billing", tags=["Billing (Vipps Bedrift & Faktura)"])
 
@@ -18,42 +19,44 @@ ALLOWED_METHODS = {"VIPPS_BEDRIFT", "FAKTURA"}
 
 PLANS = [
     {
-        "id": "PRIVAT",
-        "name": "Phink Privat",
-        "description": "For privatpersoner og enkel økonomistyring",
-        "price_ex_vat": 149.0,
-        "vat_percent": 25,
-    },
-    {
-        "id": "ENK",
-        "name": "Phink ENK / Forening",
-        "description": "Komplett regnskap, faktura med norsk MVA, bilagsarkiv & SAF-T",
+        "id": "PHINK_STANDARD",
+        "name": "Phink Komplett (Ubegrenset bilag)",
+        "description": "Alt inkludert: norsk regnskap (NS 4102), ubegrenset bilag, faktura med MVA & automatisk KID-føring, lønnskjøring, bilagsarkiv, varslinger, AI CFO og kundeservice. Ingen skjulte avgifter.",
         "price_ex_vat": 299.0,
-        "vat_percent": 25,
-    },
-    {
-        "id": "AS_PRO",
-        "name": "Phink AS Pro (inkl. Lønn & AI)",
-        "description": "Full lønnskjøring, skattetrekkskonto, avdeling/prosjekt, SAF-T & Llama AI CFO",
-        "price_ex_vat": 599.0,
-        "vat_percent": 25,
-    },
-    {
-        "id": "ENTERPRISE",
-        "name": "Phink Institusjon / Bedrift",
-        "description": "Prioritert kundeservice, ubegrenset bilag og full revisjonsstøtte",
-        "price_ex_vat": 1190.0,
         "vat_percent": 25,
     },
 ]
 
+ADDONS = {
+    "BANK_INTEGRATION": {
+        "id": "BANK_INTEGRATION",
+        "name": "Bankintegrasjon (innlogging & automatisk bank/KID-synk)",
+        "price_ex_vat": 59.0,
+        "billing": "monthly",
+    },
+    "KID_AUTOMATION": {
+        "id": "KID_AUTOMATION",
+        "name": "KID-automatisasjon (automatisk KID-matching & bokføring)",
+        "price_ex_vat": 3.0,
+        "billing": "per_invoice",
+    },
+    "SAFT_IMPORT": {
+        "id": "SAFT_IMPORT",
+        "name": "SAF-T XML filimport (fra Conta, Fiken, Tripletex m.fl.)",
+        "price_ex_vat": 79.0,
+        "billing": "one_time",
+    },
+}
+
 
 class CheckoutRequest(BaseModel):
-    plan_id: str = Field(..., description="PRIVAT | ENK | AS_PRO | ENTERPRISE")
+    plan_id: str = Field(default="PHINK_STANDARD", description="PHINK_STANDARD")
     payment_method: str = Field(..., description="KUN VIPPS_BEDRIFT eller FAKTURA")
     customer_name: str = Field(..., min_length=2, max_length=200)
     customer_email: str = Field(..., min_length=4, max_length=150)
     org_number: Optional[str] = None
+    include_bank_integration: bool = False
+    include_saft_import: bool = False
 
 
 class VippsConfigUpdate(BaseModel):
@@ -80,6 +83,7 @@ def get_plans(db: Session = Depends(get_db)):
         "vipps_number": setting.vipps_number if setting else "",
         "bank_account": setting.bank_account if setting else "1234.56.78903",
         "plans": enriched,
+        "addons": list(ADDONS.values()),
     }
 
 
@@ -107,14 +111,36 @@ def create_payment_order(req: CheckoutRequest, db: Session = Depends(get_db)):
             detail="Ugyldig betalingsmetode. Phink Accounting tar kun imot Vipps Bedrift (VIPPS_BEDRIFT) eller tilsendt faktura (FAKTURA).",
         )
 
-    plan = next((p for p in PLANS if p["id"] == req.plan_id.strip().upper()), None)
-    if not plan:
-        raise HTTPException(status_code=400, detail="Ukjent abonnementsplan.")
+    plan = next((p for p in PLANS if p["id"] == req.plan_id.strip().upper()), PLANS[0])
+
+    # Eier / Administrator har alltid gratis ubegrenset tilgang uten betaling
+    if is_owner_email(req.customer_email):
+        return {
+            "ok": True,
+            "order_id": None,
+            "payment_method": "ADMIN_FREE",
+            "plan_name": f"{plan['name']} (Gratis Administrator-konto)",
+            "amount_ex_vat": 0.0,
+            "vat_amount": 0.0,
+            "total_amount": 0.0,
+            "payment_reference": "ADMIN-EXEMPT",
+            "status": "PAID",
+            "billing_exempt": True,
+            "instructions": "Du er registrert som Administrator & Eier — kontoen din har ubegrenset tilgang helt gratis (0 kr).",
+        }
 
     setting = db.query(CompanySetting).first()
     vipps_no = (setting.vipps_number if setting and setting.vipps_number else "Oppgis i Innstillinger")
 
+    addon_labels = []
     subtotal = round(plan["price_ex_vat"], 2)
+    if req.include_bank_integration:
+        subtotal = round(subtotal + ADDONS["BANK_INTEGRATION"]["price_ex_vat"], 2)
+        addon_labels.append("Bankintegrasjon (+59 kr)")
+    if req.include_saft_import:
+        subtotal = round(subtotal + ADDONS["SAFT_IMPORT"]["price_ex_vat"], 2)
+        addon_labels.append("SAF-T import (+79 kr)")
+    plan_label = plan["name"] + (f" + {', '.join(addon_labels)}" if addon_labels else "")
     vat_amount = round(subtotal * (plan["vat_percent"] / 100.0), 2)
     total = round(subtotal + vat_amount, 2)
     now = datetime.utcnow()
@@ -178,7 +204,7 @@ def create_payment_order(req: CheckoutRequest, db: Session = Depends(get_db)):
         customer_email=req.customer_email.strip(),
         org_number=req.org_number,
         plan_id=plan["id"],
-        plan_name=plan["name"],
+        plan_name=plan_label,
         payment_method=method,
         amount_ex_vat=subtotal,
         vat_amount=vat_amount,
@@ -301,7 +327,7 @@ def get_monthly_invoice_reminders(db: Session = Depends(get_db)):
     billed_this_month = set()
     for o in all_orders:
         key = (o.customer_email or "").strip().lower()
-        if not key:
+        if not key or is_owner_email(key):
             continue
         if o.created_at and o.created_at.strftime("%Y-%m") == current_month:
             billed_this_month.add(key)

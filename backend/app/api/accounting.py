@@ -607,17 +607,69 @@ def get_bank_transactions(db: Session = Depends(get_db)):
     """Henter alle banktransaksjoner for avstemming."""
     return db.query(BankTransaction).order_by(BankTransaction.transaction_date.desc()).all()
 
+def _try_auto_match_kid_invoice(tx: BankTransaction, db: Session) -> Optional[int]:
+    """
+    Automatisk KID-integrasjon:
+    Når en innbetaling (amount > 0) kommer inn fra banken med KID i referanse/beskrivelse,
+    finner programmet matchende ubetalt kundefaktura, bokfører betalingen automatisk
+    (Debet 1920 Bank / Kredit 1500 Kundefordringer), markerer fakturaen PAID og avstemmer bankposten.
+    """
+    if tx.amount <= 0 or tx.reconciled:
+        return None
+    haystack = f"{tx.reference or ''} {tx.description or ''}"
+    open_invoices = db.query(CustomerInvoice).filter(CustomerInvoice.status != "PAID").all()
+    for inv in open_invoices:
+        kid = (inv.kid or "").strip()
+        if kid and kid in haystack and abs(round(tx.amount, 2) - round(inv.total_amount, 2)) < 0.05:
+            max_vouch = db.query(func.max(Voucher.voucher_number)).scalar() or 0
+            voucher = Voucher(
+                voucher_number=max_vouch + 1,
+                date=tx.transaction_date or datetime.utcnow(),
+                description=f"Automatisk KID-innbetaling faktura #{inv.invoice_number} ({inv.customer_name}, KID {kid})",
+                status="POSTED",
+            )
+            db.add(voucher)
+            db.flush()
+            db.add(TransactionLine(
+                voucher_id=voucher.id,
+                account_number=1920,
+                description=f"KID {kid} fra {inv.customer_name}",
+                debit=inv.total_amount,
+                credit=0.0,
+            ))
+            db.add(TransactionLine(
+                voucher_id=voucher.id,
+                account_number=1500,
+                description=f"Automatisk oppgjør faktura #{inv.invoice_number}",
+                debit=0.0,
+                credit=inv.total_amount,
+            ))
+            inv.status = "PAID"
+            tx.reconciled = True
+            tx.matched_voucher_id = voucher.id
+            tx.reconciled_at = datetime.utcnow()
+            db.add(AuditLog(
+                action="AUTO_KID_RECONCILE",
+                details=f"KID {kid} matchet automatisk faktura #{inv.invoice_number} ({inv.total_amount} kr) -> Bilag #{voucher.voucher_number}",
+                ai_assisted=False,
+            ))
+            return voucher.voucher_number
+    return None
+
+
 @router.post("/bank/transactions", response_model=BankTransactionResponse)
 def add_bank_transaction(tx: BankTransactionCreate, db: Session = Depends(get_db)):
-    """Legger inn en ny transaksjon fra banken manuelt eller via import."""
+    """Legger inn en ny transaksjon fra banken og matcher KID automatisk mot åpne kundefakturaer."""
     db_tx = BankTransaction(
         transaction_date=tx.transaction_date,
         description=tx.description,
         amount=tx.amount,
         reference=tx.reference,
-        source="MANUAL_INPUT"
+        source="BANK_INTEGRATION"
     )
     db.add(db_tx)
+    db.flush()
+    _try_auto_match_kid_invoice(db_tx, db)
     db.commit()
     db.refresh(db_tx)
     return db_tx
@@ -663,7 +715,14 @@ def auto_reconcile_bank_transactions(db: Session = Depends(get_db)):
     ).all()
 
     matched_count = 0
+    kid_matched_count = 0
     for tx in unreconciled_txs:
+        # 1. Først: automatisk KID-matching mot åpne kundefakturaer (bokfører betaling automatisk!)
+        if _try_auto_match_kid_invoice(tx, db):
+            matched_count += 1
+            kid_matched_count += 1
+            continue
+        # 2. Deretter: match mot eksisterende poster på konto 1920
         for line, voucher in lines_1920:
             line_net = round(line.debit - line.credit, 2)
             # Hvis beløpet matcher eksakt
@@ -675,7 +734,11 @@ def auto_reconcile_bank_transactions(db: Session = Depends(get_db)):
                 break
 
     db.commit()
-    return {"message": f"Automatisk avstemming fullført. {matched_count} transaksjoner ble matchet.", "matched_count": matched_count}
+    return {
+        "message": f"Automatisk avstemming fullført. {matched_count} transaksjoner matchet ({kid_matched_count} via automatisk KID-faktura).",
+        "matched_count": matched_count,
+        "kid_matched_count": kid_matched_count,
+    }
 
 @router.post("/bank/transactions/{tx_id}/quick-book")
 def quick_book_bank_transaction(tx_id: int, req: QuickBookBankTransaction, db: Session = Depends(get_db)):

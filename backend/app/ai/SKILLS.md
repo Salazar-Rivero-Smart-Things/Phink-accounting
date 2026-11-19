@@ -184,3 +184,33 @@ Når du får et økonomisk spørsmål, svar med oversiktlig tekst på norsk:
 ## Ferdighet F: Kundeservice-Triage
 - **KRITISK REGEL:** Ved refusjon (`REFUND`), dobbeltbelastning eller betalingsfeil (`PAYMENT_FAILED`), sett **ALLTID** `"status": "ESCALATED_TO_HUMAN"` og `"priority": "HIGH"`.
 - Ved vanlige spørsmål (`GENERAL`), sett `"status": "AI_HANDLING"` og `"priority": "MEDIUM"`.
+
+---
+
+## Ferdighet G: Betalinger i Utlandet som gir Skattefradrag (Snudd avregning & Utenlandsk MVA)
+1. **Annonsering i utlandet (Meta/Facebook/Instagram Ads Ireland, Google Ads Ireland):**
+   - Kostnadskonto: **`7325`** (*Annonsering & markedsføring i utlandet — skattefradrag*), avdeling `SALG`.
+   - Fjernleverbar tjeneste fra utlandet: snudd avregning 25 % MVA (Debet `2715` / Kredit `2705` = netto 0 kr MVA-belastning for MVA-pliktig bedrift, 100 % fradragsberettiget på skatt).
+2. **Programvare, SaaS & skytjenester fra utlandet (AWS, Google Cloud EMEA, OpenAI, GitHub, Cloudflare, DigitalOcean):**
+   - Kostnadskonto: **`6555`** (*Programvare, skytjenester & SaaS fra utlandet — skattefradrag*), avdeling `IT`.
+   - Fjernleverbar tjeneste (snudd avregning `2705`/`2715`), hele kostnaden trekkes fra på skatten.
+3. **Konsulenttjenester / underleverandører fra utlandet:**
+   - Kostnadskonto: **`4510`** (*Kjøp av tjenester fra utlandet — skattefradrag*), snudd avregning `2705`/`2715`.
+4. **Vareimport fra utlandet:**
+   - Kostnadskonto: **`4310`** (*Innkjøp av varer fra utlandet — import, skattefradrag*).
+5. **Tjenestereise og hotell i utlandet (f.eks. hotell i Spania, Tyskland, USA):**
+   - Kostnadskonto: **`7145`** (*Tjenestereise og hotell i utlandet — skattefradrag, 0 % norsk MVA*).
+   - **VIKTIG NORSK REGEL:** Utenlandsk moms/IVA/VAT kan **IKKE** føres som fradrag på norsk MVA-melding (`vat_amount: 0.0`, `vat_rate_percent: 0`), men **hele beløpet inkl. utenlandsk moms** føres som fradragsberettiget kostnad på konto `7145` og trekkes av på skatten!
+
+---
+
+## Ferdighet H: Phink Accounting Priser, Vipps/Faktura, KID, SAF-T & Profilendring
+- **Prismodell (åpen, ingen skjulte avgifter):**
+  - **299 kr/mnd eks. MVA:** Phink Komplett med **ubegrenset bilag**, norsk regnskap (NS 4102), faktura med MVA, automatisk KID-integrasjon, lønnskjøring, bilagsarkiv (5 år), SAF-T eksport, varslinger og AI CFO.
+  - **+ 59 kr/mnd eks. MVA:** Bankintegrasjon (innlogging mot banken din + automatisk bank/KID-føring).
+  - **3 kr per KID-faktura eks. MVA:** KID-automatisasjon (automatisk matching og bokføring av KID-innbetalinger).
+  - **+ 79 kr eks. MVA:** SAF-T XML filimport fra andre regnskapsprogrammer.
+  - **150 kr eks. MVA:** Endring/korrigering av kundeprofil ved feilregistrering (0 kr / gratis for administrator).
+- **Betaling:** Kun **Vipps Bedrift** eller **Tilsendt faktura** (14 dager, KID & 25 % MVA).
+- **KID-integrasjon & Varslinger:** Kunden har KID-avtale med banken sin; når en KID-betaling registreres fra banken, bokfører og avstemmer Phink fakturaen automatisk (`1920`/`1500`). Uoppgjorte/forfalte fakturaer varsles automatisk i **Varslinger**-menyen.
+- **Kontotyper:** Privatperson (fødselsnummer), ENK, AS, Forening og Institusjon (MOD11-validert organisasjonsnummer).

@@ -251,6 +251,12 @@ class LlamaService:
         if amounts:
             cleaned_amounts = [float(a.replace(",", ".")) for a in amounts]
             total_amount = max(cleaned_amounts)
+        else:
+            whole_matches = re.findall(r"(?:total(?:beløp)?|sum|beløp)?\s*:?\s*(\d[\d\s]{1,10})\s*(?:nok|kr|eur|usd)", text, re.IGNORECASE)
+            if whole_matches:
+                cleaned_whole = [float(m.replace(" ", "")) for m in whole_matches if m.replace(" ", "").isdigit()]
+                if cleaned_whole:
+                    total_amount = max(cleaned_whole)
 
         text_lower = text.lower()
         vat_rate = 25
@@ -262,7 +268,32 @@ class LlamaService:
             proj_code = proj_match.group(1).upper().replace(" ", "-")
             proj_name = f"Prosjekt {proj_code}"
 
-        if any(w in text_lower for w in ["underentreprenør", "innleid", "fremmedytelse", "elektriker", "rørlegger", "konsulent"]):
+        if any(w in text_lower for w in ["meta ireland", "meta platforms ireland", "facebook ads", "instagram ads", "google ads ireland", "google ireland"]):
+            account, account_name = 7325, "Annonsering & markedsføring i utlandet (Meta/Google Ads, skattefradrag)"
+            vat_rate = 0
+            dept_code, dept_name = "SALG", "Salg og Marked"
+            explanation = "Annonsering i utlandet (Meta/Google Ireland) føres på 7325 med fullt skattefradrag og snudd avregning MVA (2715/2705)."
+        elif any(w in text_lower for w in ["openai", "amazon web services", "aws", "github", "cloudflare", "google cloud emea", "vercel", "digitalocean"]):
+            account, account_name = 6555, "Programvare, skytjenester & SaaS fra utlandet (Skattefradrag)"
+            vat_rate = 0
+            dept_code, dept_name = "IT", "IT og Utvikling"
+            explanation = "Utenlandsk SaaS/skytjeneste føres på 6555 med fullt skattefradrag og snudd avregning MVA (2715/2705)."
+        elif any(w in text_lower for w in ["import fra utlandet", "vareimport", "toll", "utland import"]):
+            account, account_name = 4310, "Innkjøp av varer fra utlandet (Import, skattefradrag)"
+            vat_rate = 0
+            dept_code, dept_name = "DRIFT", "Drift og Produksjon"
+            explanation = "Vareimport fra utlandet føres på 4310 med fullt skattefradrag."
+        elif any(w in text_lower for w in ["konsulent utland", "tjenester fra utlandet", "foreign consulting"]):
+            account, account_name = 4510, "Kjøp av tjenester fra utlandet (Skattefradrag / snudd avregning)"
+            vat_rate = 0
+            dept_code, dept_name = "DRIFT", "Drift og Produksjon"
+            explanation = "Utenlandsk konsulenttjeneste føres på 4510 med skattefradrag og snudd avregning MVA (2715/2705)."
+        elif any(w in text_lower for w in ["hotell utland", "hotel madrid", "hotel spania", "hotel barcelona", "hotel london", "hotel berlin", "tjenestereise utland", "iva "]):
+            account, account_name = 7145, "Tjenestereise og hotell i utlandet (Skattefradrag, 0% norsk MVA)"
+            vat_rate = 0
+            dept_code, dept_name = "SALG", "Salg og Marked"
+            explanation = "Reise/hotell i utlandet føres på 7145 (0% norsk MVA-fradrag, hele totalbeløpet trekkes av på skatten)."
+        elif any(w in text_lower for w in ["underentreprenør", "innleid", "fremmedytelse", "elektriker", "rørlegger", "konsulent"]):
             account, account_name = 4500, "Fremmedytelser og underleverandører"
             dept_code, dept_name = "DRIFT", "Drift og Produksjon"
             explanation = "Gjenkjente underleverandør / fremmedytelse på prosjekt (konto 4500)."
@@ -364,12 +395,26 @@ class LlamaService:
         tag_prefix = f"[{dept}/{proj}] " if proj != "FELLES" else f"[{dept}] "
         desc = f"{tag_prefix}Faktura fra {supplier}"
 
-        # Lovpålagt norsk MVA-kontroll (Representasjon 7350/7360, Forsikring 7500, Bankgebyr 7770, Diett/Bilgodtgj. 7080/7150 har 0% MVA-fradrag)
-        if account in (7350, 7360, 7500, 7770, 7080, 7150, 7400):
+        # Lovpålagt norsk MVA-kontroll (Representasjon 7350/7360, Forsikring 7500, Bankgebyr 7770, Diett/Bilgodtgj. 7080/7150, Utenlandsreise 7145 har 0% norsk MVA-fradrag)
+        if account in (7350, 7360, 7500, 7770, 7080, 7150, 7400, 7145):
             vat = 0.0
             vat_rate = 0
             data["vat_amount"] = 0.0
             data["vat_rate_percent"] = 0
+        elif account in (4510, 6555, 7325):
+            # Snudd avregning 25 % MVA ved fjernleverbare tjenester fra utlandet (netto 0 kr MVA, 100 % skattefradrag)
+            reverse_vat = round(total * 0.25, 2)
+            data["vat_amount"] = 0.0
+            data["vat_rate_percent"] = 0
+            data["suggested_lines"] = [
+                {"account_number": account, "description": f"{desc} (utland — fullt skattefradrag)", "debit": total, "credit": 0.0},
+                {"account_number": 2715, "description": f"{tag_prefix}Inngående MVA utland (snudd avregning 25%)", "debit": reverse_vat, "credit": 0.0},
+                {"account_number": 2705, "description": f"{tag_prefix}Utgående MVA utland (snudd avregning 25%)", "debit": 0.0, "credit": reverse_vat},
+                {"account_number": 2400, "description": f"{tag_prefix}Leverandørgjeld utland ({supplier})", "debit": 0.0, "credit": total},
+            ]
+            data["is_duplicate"] = False
+            data["duplicate_warning"] = None
+            return data
         elif account == 7140 and vat > 0:
             vat_rate = 12
             data["vat_rate_percent"] = 12

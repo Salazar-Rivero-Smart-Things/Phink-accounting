@@ -1,4 +1,8 @@
 import os
+from dotenv import load_dotenv
+
+# Last .env automatisk fra backend/.env (brukes både lokalt og mot Domeneshop MariaDB 11.4)
+load_dotenv()
 
 class Settings:
     PROJECT_NAME: str = "Phink Accounting"
@@ -27,6 +31,8 @@ class Settings:
     # 4) Domenekonfigurasjon, Autentisering og Kundebehandler / Operator PIN
     PUBLIC_DOMAIN: str = os.getenv("PUBLIC_DOMAIN", "www.phink-acounting.no")
     OPERATOR_PIN: str = os.getenv("OPERATOR_PIN", "2026")
+    OWNER_EMAILS: str = os.getenv("OWNER_EMAILS", "riveroosx7@gmail.com")
+    ADMIN_SEED_PASSWORD: str = os.getenv("ADMIN_SEED_PASSWORD", "")
     AUTH_SECRET: str = os.getenv("AUTH_SECRET", "phink-accounting-local-secret-change-in-prod-2026")
     ACCESS_TOKEN_EXPIRE_HOURS: int = int(os.getenv("ACCESS_TOKEN_EXPIRE_HOURS", "72"))
 

@@ -56,7 +56,9 @@ export default function BillingPanel({
   const [orders, setOrders] = useState<BillingOrder[]>([]);
   const [monthly, setMonthly] = useState<MonthlyReminder | null>(null);
 
-  const [selectedPlan, setSelectedPlan] = useState("AS_PRO");
+  const [selectedPlan, setSelectedPlan] = useState("PHINK_STANDARD");
+  const [includeBank, setIncludeBank] = useState(false);
+  const [includeSaft, setIncludeSaft] = useState(false);
   const [paymentMethod, setPaymentMethod] = useState<"VIPPS_BEDRIFT" | "FAKTURA">("VIPPS_BEDRIFT");
   const [customerName, setCustomerName] = useState("");
   const [customerEmail, setCustomerEmail] = useState("");
@@ -120,6 +122,8 @@ export default function BillingPanel({
           customer_name: customerName,
           customer_email: customerEmail,
           org_number: orgNumber || null,
+          include_bank_integration: includeBank,
+          include_saft_import: includeSaft,
         }),
       });
       const data = await res.json();
@@ -264,25 +268,46 @@ export default function BillingPanel({
       >
         <h3 className="font-bold text-slate-900 text-base">Ny betaling eller månedlig faktura</h3>
 
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
+        <div className="space-y-3">
           {plans.map((p) => (
-            <button
+            <div
               key={p.id}
-              type="button"
-              onClick={() => setSelectedPlan(p.id)}
-              className={`text-left rounded-xl border p-3.5 transition cursor-pointer ${
-                selectedPlan === p.id
-                  ? "border-blue-600 bg-blue-50/70 ring-1 ring-blue-600"
-                  : "border-slate-200 hover:border-slate-300"
-              }`}
+              className="rounded-xl border border-blue-600 bg-blue-50/70 p-4 flex flex-wrap items-center justify-between gap-2"
             >
-              <div className="font-bold text-slate-900 text-xs">{p.name}</div>
-              <div className="text-base font-extrabold text-blue-700 mt-1">
-                {fmt(p.price_ex_vat)} kr <span className="text-[10px] font-normal text-slate-500">eks. MVA/mnd</span>
+              <div>
+                <div className="font-bold text-slate-900 text-sm">{p.name}</div>
+                <div className="text-xs text-slate-600">{p.description}</div>
               </div>
-              <div className="text-[11px] text-slate-500 mt-0.5">({fmt(p.total_inc_vat)} kr inkl. 25 % MVA)</div>
-            </button>
+              <div className="text-right">
+                <div className="text-lg font-extrabold text-blue-700">{fmt(p.price_ex_vat)} kr/mnd</div>
+                <div className="text-[11px] text-slate-500">eks. MVA ({fmt(p.total_inc_vat)} kr inkl. 25 % MVA)</div>
+              </div>
+            </div>
           ))}
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs">
+            <label className="flex items-center justify-between rounded-xl border border-slate-200 p-3 cursor-pointer hover:bg-slate-50">
+              <span className="inline-flex items-center gap-2 font-medium text-slate-800">
+                <input
+                  type="checkbox"
+                  checked={includeBank}
+                  onChange={(e) => setIncludeBank(e.target.checked)}
+                />
+                Bankintegrasjon (innlogging &amp; automatisk KID)
+              </span>
+              <span className="font-mono font-bold text-blue-700">+ 59 kr/mnd</span>
+            </label>
+            <label className="flex items-center justify-between rounded-xl border border-slate-200 p-3 cursor-pointer hover:bg-slate-50">
+              <span className="inline-flex items-center gap-2 font-medium text-slate-800">
+                <input
+                  type="checkbox"
+                  checked={includeSaft}
+                  onChange={(e) => setIncludeSaft(e.target.checked)}
+                />
+                SAF-T XML filimport
+              </span>
+              <span className="font-mono font-bold text-blue-700">+ 79 kr</span>
+            </label>
+          </div>
         </div>
 
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">

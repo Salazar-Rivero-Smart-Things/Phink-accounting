@@ -902,19 +902,33 @@ def get_notifications(db: Session = Depends(get_db)):
             "created_at": now.isoformat(),
         })
 
-    # 2. Forfalte kundefakturaer (bør purres)
+    # 2. Uoppgjorte og forfalte kundefakturaer (KID-oppfølging & varsling)
     unpaid_cust = db.query(CustomerInvoice).filter(CustomerInvoice.status != "PAID").all()
     overdue_cust = [i for i in unpaid_cust if i.due_date and i.due_date < now]
+    open_not_overdue_cust = [i for i in unpaid_cust if not (i.due_date and i.due_date < now)]
     if overdue_cust:
         tot = round(sum(i.total_amount for i in overdue_cust), 2)
+        kids = ", ".join(filter(None, [i.kid for i in overdue_cust[:5]]))
         alerts.append({
             "id": "cust-overdue",
-            "severity": "WARNING",
-            "category": "Fakturering",
-            "title": f"{len(overdue_cust)} ubetalt(e) kundefaktura(er) over forfall",
-            "message": f"Du har {tot:,.2f} kr utestående over forfall. Send purring eller inkassovarsel.",
+            "severity": "CRITICAL",
+            "category": "Uoppgjorte fakturaer (KID)",
+            "title": f"{len(overdue_cust)} forfalt(e) uoppgjort(e) kundefaktura(er)",
+            "message": f"Du har {tot:,.2f} kr over forfall som ikke er betalt (KID: {kids or '—'}). Send purring eller sjekk bank/KID-innbetaling.",
             "action_tab": "invoices",
-            "action_label": "Gå til Faktura & Kunder",
+            "action_label": "Følg opp fakturaer",
+            "created_at": now.isoformat(),
+        })
+    if open_not_overdue_cust:
+        tot = round(sum(i.total_amount for i in open_not_overdue_cust), 2)
+        alerts.append({
+            "id": "cust-unsettled",
+            "severity": "INFO",
+            "category": "Uoppgjorte fakturaer (KID)",
+            "title": f"{len(open_not_overdue_cust)} uoppgjort(e) kundefaktura(er) venter på betaling",
+            "message": f"Totalt {tot:,.2f} kr venter på innbetaling. Ved KID-innbetaling fra banken føres og avstemmes fakturaen automatisk.",
+            "action_tab": "invoices",
+            "action_label": "Se åpne fakturaer",
             "created_at": now.isoformat(),
         })
 

@@ -8,6 +8,11 @@ export interface AuthUser {
   email: string;
   full_name: string;
   role: string;
+  is_admin?: boolean;
+  is_support_agent?: boolean;
+  is_customer_account?: boolean;
+  billing_exempt?: boolean;
+  plan_label?: string;
   entity_type: "PRIVATE" | "ENK" | "AS" | "FORENING" | "INSTITUSJON";
   entity_type_label: string;
   company_name?: string | null;
@@ -33,7 +38,7 @@ export default function AuthModal({
   onAuthenticated: (user: AuthUser, token: string) => void;
 }) {
   const [mode, setMode] = useState<"login" | "register">("login");
-  const [email, setEmail] = useState("admin@phink-acounting.no");
+  const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [fullName, setFullName] = useState("");
   const [entityType, setEntityType] = useState<AuthUser["entity_type"]>("AS");
@@ -253,7 +258,7 @@ export default function AuthModal({
                 minLength={6}
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
-                placeholder={mode === "login" ? "Demo: Phink2026!" : "Minst 6 tegn"}
+                placeholder={mode === "login" ? "Skriv inn passord" : "Minst 6 tegn"}
                 className="w-full rounded-xl border border-slate-300 pl-9 pr-3 py-2 text-sm text-slate-900"
               />
             </div>

@@ -11,7 +11,11 @@ import secrets
 
 from app.config import settings
 from app.database import get_db
-from app.models.accounting import User, CompanySetting, AuditLog
+from app.models.accounting import User, CompanySetting, AuditLog, SubscriptionOrder
+from datetime import timedelta as _td
+import uuid as _uuid
+
+PROFILE_CHANGE_FEE_EX_VAT = 150.0
 
 router = APIRouter(prefix="/auth", tags=["Authentication"])
 
@@ -113,12 +117,31 @@ def decode_access_token(token: str) -> Optional[dict]:
         return None
 
 
+def is_owner_email(email: Optional[str]) -> bool:
+    if not email:
+        return False
+    allowed = {e.strip().lower() for e in (settings.OWNER_EMAILS or "").split(",") if e.strip()}
+    return email.strip().lower() in allowed
+
+
 def serialize_user(user: User) -> dict:
+    owner_match = is_owner_email(user.email)
+    is_admin = owner_match or user.role in ("OWNER", "ADMIN")
+    is_support_agent = is_admin or user.role == "SUPPORT_AGENT"
     return {
         "id": user.id,
         "email": user.email,
         "full_name": user.full_name,
-        "role": user.role,
+        "role": "OWNER" if owner_match else user.role,
+        "is_admin": is_admin,
+        "is_support_agent": is_support_agent,
+        "is_customer_account": True,
+        "billing_exempt": is_admin,
+        "plan_label": (
+            "Gratis Administrator, Kundeservice & Kundekonto (Ubegrenset)"
+            if is_admin
+            else "Standard kundekonto"
+        ),
         "entity_type": user.entity_type,
         "entity_type_label": ENTITY_TYPE_LABELS.get(user.entity_type, user.entity_type),
         "company_name": user.company_name,
@@ -145,17 +168,24 @@ class LoginRequest(BaseModel):
 
 
 def seed_default_owner(db: Session):
-    """Oppretter en lokal standard administrator-bruker dersom brukertabellen er tom."""
+    """
+    Oppretter eier/administrator fra miljøvariablene OWNER_EMAILS og ADMIN_SEED_PASSWORD
+    dersom brukertabellen er tom. (Ingen hardkodede passord i kildekoden.)
+    """
     if db.query(User).count() > 0:
         return
+    if not settings.ADMIN_SEED_PASSWORD:
+        return
+    primary_email = next((e.strip().lower() for e in settings.OWNER_EMAILS.split(",") if e.strip()), None)
+    if not primary_email:
+        return
     owner = User(
-        email="admin@phink-acounting.no",
-        password_hash=hash_password("Phink2026!"),
+        email=primary_email,
+        password_hash=hash_password(settings.ADMIN_SEED_PASSWORD),
         full_name="Phink Administrator",
         role="OWNER",
         entity_type="AS",
-        company_name="Phink Regnskap AS",
-        org_number="999888777",
+        company_name="Phink Accounting",
         is_active=True,
     )
     db.add(owner)
@@ -232,7 +262,7 @@ def register_user(req: RegisterRequest, db: Session = Depends(get_db)):
         email=email,
         password_hash=hash_password(req.password),
         full_name=req.full_name.strip(),
-        role="OWNER" if is_first else "USER",
+        role="OWNER" if (is_first or is_owner_email(email)) else "USER",
         entity_type=entity_type,
         company_name=company_name,
         org_number=clean_orgnr,
@@ -310,3 +340,128 @@ def get_current_user(
 def list_registered_users(db: Session = Depends(get_db)):
     users = db.query(User).order_by(User.created_at.desc()).all()
     return [serialize_user(u) for u in users]
+
+
+class ProfileUpdateRequest(BaseModel):
+    full_name: Optional[str] = None
+    company_name: Optional[str] = None
+    entity_type: Optional[str] = None
+    org_number: Optional[str] = None
+    national_id: Optional[str] = None
+    payment_method: str = Field(default="VIPPS_BEDRIFT", description="VIPPS_BEDRIFT eller FAKTURA (for kundegebyr 150 kr)")
+    target_user_id: Optional[int] = None  # Kun for administrator som skal rette profilen til en kunde
+
+
+@router.put("/profile")
+def update_user_profile(
+    req: ProfileUpdateRequest,
+    authorization: Optional[str] = Header(default=None),
+    db: Session = Depends(get_db),
+):
+    """
+    Lar både kunde og administrator korrigere/oppdatere profilopplysninger ved feil.
+    - Kunde: koster 150 kr eks. MVA (187,50 kr inkl. 25 % MVA) via Vipps Bedrift eller tilsendt faktura.
+    - Administrator (OWNER/ADMIN): 0 kr (gratis), kan også oppdatere kunders profiler via target_user_id.
+    """
+    if not authorization or not authorization.lower().startswith("bearer "):
+        raise HTTPException(status_code=401, detail="Du må være innlogget for å endre profilen.")
+    payload = decode_access_token(authorization[7:].strip())
+    if not payload:
+        raise HTTPException(status_code=401, detail="Ugyldig eller utløpt innloggingstoken.")
+
+    actor = db.query(User).filter(User.id == payload.get("sub")).first()
+    if not actor:
+        raise HTTPException(status_code=401, detail="Bruker ikke funnet.")
+
+    actor_is_admin = is_owner_email(actor.email) or actor.role in ("OWNER", "ADMIN")
+    target = actor
+    if req.target_user_id and req.target_user_id != actor.id:
+        if not actor_is_admin:
+            raise HTTPException(status_code=403, detail="Kun administrator kan endre andre brukeres profiler.")
+        target = db.query(User).filter(User.id == req.target_user_id).first()
+        if not target:
+            raise HTTPException(status_code=404, detail="Kundebruker ikke funnet.")
+
+    new_entity = (req.entity_type or target.entity_type or "AS").strip().upper()
+    if new_entity not in VALID_ENTITY_TYPES:
+        raise HTTPException(status_code=400, detail=f"Ugyldig kontotype '{new_entity}'.")
+
+    if req.org_number is not None and req.org_number.strip():
+        ok, val = validate_norwegian_orgnr(req.org_number)
+        if not ok:
+            raise HTTPException(status_code=400, detail=val)
+        target.org_number = val
+
+    if req.national_id is not None and req.national_id.strip():
+        ok, val = validate_norwegian_national_id(req.national_id)
+        if not ok:
+            raise HTTPException(status_code=400, detail=val)
+        target.national_id = val
+
+    if req.full_name and req.full_name.strip():
+        target.full_name = req.full_name.strip()
+    if req.company_name and req.company_name.strip():
+        target.company_name = req.company_name.strip()
+    target.entity_type = new_entity
+
+    # Synkroniser bedriftsinnstillinger hvis dette er aktiv bruker
+    setting = db.query(CompanySetting).first()
+    if setting and target.id == actor.id:
+        if target.company_name:
+            setting.company_name = target.company_name
+        setting.entity_type = target.entity_type
+        if target.org_number:
+            setting.org_number = target.org_number
+        if target.national_id:
+            setting.national_id = target.national_id
+
+    fee_info = {"fee_ex_vat": 0.0, "vat_amount": 0.0, "total_inc_vat": 0.0, "payment_reference": "ADMIN-FREE"}
+    if not actor_is_admin:
+        method = (req.payment_method or "VIPPS_BEDRIFT").strip().upper()
+        if method not in ("VIPPS_BEDRIFT", "FAKTURA"):
+            raise HTTPException(status_code=400, detail="Endringsgebyr (150 kr) kan kun betales med VIPPS_BEDRIFT eller FAKTURA.")
+        vat_amt = round(PROFILE_CHANGE_FEE_EX_VAT * 0.25, 2)
+        total_inc = round(PROFILE_CHANGE_FEE_EX_VAT + vat_amt, 2)
+        ref = f"PROFIL-{_uuid.uuid4().hex[:6].upper()}"
+        order = SubscriptionOrder(
+            customer_name=target.company_name or target.full_name,
+            customer_email=target.email,
+            org_number=target.org_number,
+            plan_id="PROFILE_CHANGE",
+            plan_name="Endring av bruker-/firmaprofil (150 kr eks. MVA)",
+            payment_method=method,
+            amount_ex_vat=PROFILE_CHANGE_FEE_EX_VAT,
+            vat_amount=vat_amt,
+            total_amount=total_inc,
+            vipps_number=(setting.vipps_number if setting and method == "VIPPS_BEDRIFT" else None),
+            payment_reference=ref,
+            status="INVOICE_SENT" if method == "FAKTURA" else "PENDING",
+            due_date=datetime.utcnow() + _td(days=14),
+        )
+        db.add(order)
+        fee_info = {
+            "fee_ex_vat": PROFILE_CHANGE_FEE_EX_VAT,
+            "vat_amount": vat_amt,
+            "total_inc_vat": total_inc,
+            "payment_method": method,
+            "payment_reference": ref,
+        }
+
+    db.add(AuditLog(
+        action="PROFILE_UPDATED",
+        details=f"Profil oppdatert for {target.email} av {actor.email} (Gebyr: {fee_info['fee_ex_vat']} kr eks. MVA).",
+        ai_assisted=False,
+    ))
+    db.commit()
+    db.refresh(target)
+
+    return {
+        "ok": True,
+        "user": serialize_user(target),
+        "fee": fee_info,
+        "message": (
+            "Profil oppdatert (Administrator: 0 kr)."
+            if actor_is_admin
+            else f"Profil oppdatert! Endringsgebyr på 150 kr eks. MVA ({fee_info['total_inc_vat']:.2f} kr inkl. MVA) er registrert via {fee_info['payment_method']} (Ref: {fee_info['payment_reference']})."
+        ),
+    }
