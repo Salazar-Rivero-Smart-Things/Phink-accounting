@@ -337,8 +337,46 @@ def get_current_user(
 
 
 @router.get("/users")
-def list_registered_users(db: Session = Depends(get_db)):
+def list_registered_users(
+    q: Optional[str] = None,
+    authorization: Optional[str] = Header(default=None),
+    db: Session = Depends(get_db),
+):
+    """
+    Henter registrerte brukere/kunder.
+    Støtter søk (?q=...) på navn, firmanavn, e-post, organisasjonsnummer
+    og (for innlogget Administrator) fødsels- og personnummer.
+    """
+    is_admin_caller = False
+    if authorization and authorization.lower().startswith("bearer "):
+        payload = decode_access_token(authorization[7:].strip())
+        if payload:
+            actor = db.query(User).filter(User.id == payload.get("sub")).first()
+            if actor and (is_owner_email(actor.email) or actor.role in ("OWNER", "ADMIN")):
+                is_admin_caller = True
+
     users = db.query(User).order_by(User.created_at.desc()).all()
+    if q and q.strip():
+        needle = q.strip().lower()
+        needle_digits = "".join(c for c in needle if c.isdigit())
+        filtered = []
+        for u in users:
+            haystack = " ".join([
+                u.full_name or "",
+                u.company_name or "",
+                u.email or "",
+                u.entity_type or "",
+                ENTITY_TYPE_LABELS.get(u.entity_type, ""),
+            ]).lower()
+            org_digits = "".join(c for c in (u.org_number or "") if c.isdigit())
+            fnr_digits = "".join(c for c in (u.national_id or "") if c.isdigit()) if is_admin_caller else ""
+            if (
+                needle in haystack
+                or (needle_digits and needle_digits in org_digits)
+                or (is_admin_caller and needle_digits and needle_digits in fnr_digits)
+            ):
+                filtered.append(u)
+        users = filtered
     return [serialize_user(u) for u in users]
 
 

@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useEffect, useState } from "react";
-import { CheckCircle, Lock, Receipt, ShieldCheck, Smartphone, X } from "lucide-react";
+import { CheckCircle, Lock, Receipt, Search, ShieldCheck, Smartphone, X } from "lucide-react";
 import type { AuthUser } from "./AuthModal";
 
 const ENTITY_OPTIONS: Array<{ value: AuthUser["entity_type"]; label: string }> = [
@@ -36,20 +36,30 @@ export default function ProfileModal({
   const isAdmin = Boolean(user.is_admin);
   const [allUsers, setAllUsers] = useState<AuthUser[]>([]);
   const [targetUserId, setTargetUserId] = useState<number>(user.id);
+  const [searchQuery, setSearchQuery] = useState("");
+  const [searchingUsers, setSearchingUsers] = useState(false);
 
   useEffect(() => {
     if (!isAdmin) return;
-    fetch(`${apiBase}/auth/users`)
+    const token = typeof window !== "undefined" ? localStorage.getItem("phink_token") || "" : "";
+    const trimmed = searchQuery.trim();
+    const url = trimmed
+      ? `${apiBase}/auth/users?q=${encodeURIComponent(trimmed)}`
+      : `${apiBase}/auth/users`;
+    setSearchingUsers(true);
+    fetch(url, { headers: token ? { Authorization: `Bearer ${token}` } : undefined })
       .then((r) => (r.ok ? r.json() : []))
       .then((list) => {
         if (Array.isArray(list)) setAllUsers(list);
       })
-      .catch(() => undefined);
-  }, [apiBase, isAdmin]);
+      .catch(() => undefined)
+      .finally(() => setSearchingUsers(false));
+  }, [apiBase, isAdmin, searchQuery]);
 
-  function selectTargetUser(id: number) {
+  function selectTargetUser(id: number, listOverride?: AuthUser[]) {
     setTargetUserId(id);
-    const found = allUsers.find((u) => u.id === id);
+    const source = listOverride || allUsers;
+    const found = source.find((u) => u.id === id);
     if (found) {
       setFullName(found.full_name || "");
       setCompanyName(found.company_name || "");
@@ -118,20 +128,75 @@ export default function ProfileModal({
         </div>
 
         <form onSubmit={handleSave} className="p-6 space-y-4 text-xs">
-          {isAdmin && allUsers.length > 0 && (
-            <div className="rounded-xl border border-blue-200 bg-blue-50 p-3">
-              <label className="block font-bold text-blue-900 mb-1">Velg hvilken bruker/kunde du vil redigere:</label>
-              <select
-                value={targetUserId}
-                onChange={(e) => selectTargetUser(Number(e.target.value))}
-                className="w-full rounded-lg border border-blue-300 bg-white px-3 py-2 text-slate-900"
-              >
-                {allUsers.map((u) => (
-                  <option key={u.id} value={u.id}>
-                    {u.email} — {u.company_name || u.full_name} ({u.entity_type})
-                  </option>
-                ))}
-              </select>
+          {isAdmin && (
+            <div className="rounded-xl border border-blue-200 bg-blue-50 p-3 space-y-2.5">
+              <div>
+                <label className="block font-bold text-blue-900 mb-1">
+                  Søk etter registrert firma eller enkeltperson (navn, org.nr eller fødselsnummer):
+                </label>
+                <div className="relative">
+                  <Search className="w-3.5 h-3.5 text-blue-500 absolute left-3 top-2.5" />
+                  <input
+                    type="search"
+                    value={searchQuery}
+                    onChange={(e) => setSearchQuery(e.target.value)}
+                    placeholder="Skriv navn, firmanavn, 9-sifret org.nr eller 11-sifret fødselsnummer…"
+                    className="w-full rounded-lg border border-blue-300 bg-white pl-8 pr-3 py-2 text-slate-900 placeholder:text-slate-400"
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label className="block font-semibold text-blue-900 mb-1">
+                  Velg bruker/kunde å redigere ({searchingUsers ? "Søker…" : `${allUsers.length} treff`}):
+                </label>
+                {allUsers.length > 0 ? (
+                  <select
+                    value={allUsers.some((u) => u.id === targetUserId) ? targetUserId : allUsers[0].id}
+                    onChange={(e) => selectTargetUser(Number(e.target.value))}
+                    className="w-full rounded-lg border border-blue-300 bg-white px-3 py-2 text-slate-900"
+                  >
+                    {allUsers.map((u) => (
+                      <option key={u.id} value={u.id}>
+                        {u.company_name ? `${u.company_name} — ` : ""}
+                        {u.full_name} ({u.entity_type}
+                        {u.org_number ? ` · Org.nr ${u.org_number}` : ""}
+                        {u.national_id_masked ? ` · Fnr ${u.national_id_masked}` : ""}) — {u.email}
+                      </option>
+                    ))}
+                  </select>
+                ) : (
+                  <div className="rounded-lg border border-blue-200 bg-white px-3 py-2 text-slate-500">
+                    Ingen registrerte firmaer eller enkeltpersoner matchet «{searchQuery}».
+                  </div>
+                )}
+                {searchQuery.trim() && allUsers.length > 0 && (
+                  <div className="mt-2 max-h-32 overflow-y-auto divide-y divide-blue-100 rounded-lg border border-blue-200 bg-white">
+                    {allUsers.map((u) => (
+                      <button
+                        key={u.id}
+                        type="button"
+                        onClick={() => selectTargetUser(u.id)}
+                        className={`w-full text-left px-3 py-2 hover:bg-blue-50 cursor-pointer flex items-center justify-between ${
+                          targetUserId === u.id ? "bg-blue-50 font-bold" : ""
+                        }`}
+                      >
+                        <div>
+                          <div className="text-slate-900">
+                            {u.company_name || u.full_name} <span className="text-slate-500">({u.entity_type})</span>
+                          </div>
+                          <div className="text-[10px] text-slate-500">
+                            {u.full_name} · {u.email}
+                            {u.org_number ? ` · Org.nr ${u.org_number}` : ""}
+                            {u.national_id_masked ? ` · Fnr ${u.national_id_masked}` : ""}
+                          </div>
+                        </div>
+                        <span className="text-[10px] text-blue-700 font-semibold shrink-0 ml-2">Velg →</span>
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
             </div>
           )}
 
