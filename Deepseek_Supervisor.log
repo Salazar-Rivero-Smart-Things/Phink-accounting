@@ -1,0 +1,103 @@
+================================================================================
+DEEPSEEK SUPERVISOR HANDOVER & LIVE LOG — Phink Accounting
+File: C:\Users\Pepito Liindo\Documents\MyGits\Phinx-accounting\Deepseek_Supervisor.log
+Counterpart Log: C:\Users\Pepito Liindo\Documents\MyGits\Phinx-accounting\Gemini_Supervisor.log
+Onboarding Guide: C:\Users\Pepito Liindo\Documents\MyGits\Phinx-accounting\FOR_DEEPSEEK_AA_LESES.md
+================================================================================
+
+[PROSJEKTSTATUS — SIST OPPDATERT: 2026-11-20 00:30 CET av Gemini Supervisor]
+GitHub Repo : https://github.com/Salazar-Rivero-Smart-Things/Phink-accounting.git (branch: main)
+Siste commit: c5e4124 (alle tester bestått 16/16 + Next.js build exit 0)
+Eier / Admin: Hollman Enrique Salazar Rivero — Salazar Rivero Smart Things (ENK)
+Admin e-post: riveroosx7@gmail.com (OWNER · Admin · Kundeservice · Gratis konto · 0 kr profilendring)
+Domene      : https://www.phink-accounting.no  (MERK TO 'c'-er: phink-accounting.no!)
+
+--------------------------------------------------------------------------------
+1. ARKITEKTUR & HVORDAN PROSJEKTET ER BYGGET
+--------------------------------------------------------------------------------
+- Frontend (frontend/): Next.js 16.4.6 (App Router, Turbopack, cacheComponents: true)
+  - Proxyer /api/* og /uploads/* via next.config.ts -> BACKEND_INTERNAL_URL
+  - Tospråklig (Engelsk & Norsk): frontend/src/lib/i18n.tsx viser språkvelger ved første besøk
+    + EN/NO-knapp i sidemeny & login.
+  - Ruter: / (landing), /priser (prisliste), /register, /login (inkl. Glemt passord?), /app (beskyttet)
+- Backend (backend/): FastAPI + SQLAlchemy 2.0 + Pydantic v2
+  - Lokalt utviklingsmiljø: SQLite (backend/phink_accounting.db) — overstyres med DATABASE_URL
+  - Produksjon (Railway): Managed PostgreSQL 18 (psycopg[binary] v3 + psycopg2-binary)
+  - Domeneshop SQL-skjema (MariaDB 11.4): database/domeneshop_mariadb_11_4.sql (allerede importert av eier)
+  - Full norsk standard kontoplan NS 4102 (104 kontoer) på BÅDE norsk og offisiell lovpålagt engelsk
+    (GET /api/accounting/accounts?lang=en), inkl.:
+      * 7775 Inkassogebyr og purregebyr / Debt Collection & Reminder Fees (0% MVA, skattefradrag)
+      * 8150 Rentekostnader og forsinkelsesrenter / Interest Expenses & Late Payment Interest
+      * 4310, 4510, 6555, 7145, 7325 (Utenlandske skattefradrag + snudd avregning 2705/2715)
+  - Tospråklig AI CFO & bilagstolker (backend/app/ai/llama_service.py + SKILLS.md):
+    Svarer på både engelsk og norsk, testet 16/16 bestått.
+  - Live Kundeservicedesk (backend/app/api/support.py):
+    * Låser valgt kunde ved auto-oppdatering (hopper ikke tilbake til kunde #1)
+    * /reply og /messages virker begge
+    * Auto-fullføring: Når operatør spør «Er ditt problem løst nå?» og kunden svarer «ja»,
+      markeres saken automatisk RESOLVED og fjernes fra aktiv kø.
+  - Manuell inngående balanse (POST /api/accounting/opening-balance + OpeningBalanceModal.tsx)
+  - Låste innstillinger for kunder (403 på POST /api/accounting/settings; 150 kr forespørsel via PUT /api/auth/profile)
+  - Administrator kan søke registrerte firma/enkeltpersoner via navn, 9-sifret org.nr eller 11-sifret fnr (GET /api/auth/users?q=...)
+  - Altinn: INGENTING sendes automatisk — kun manuelle knapper (MVA + Send inn regnskap).
+
+--------------------------------------------------------------------------------
+2. RAILWAY PRODUKSJON (KONFIGURASJON & ID-ER FOR ENDRINGER)
+--------------------------------------------------------------------------------
+- Konto / Eier : Hollman Enrique Salazar Rivero — riveroosx7@gmail.com (Hobby plan)
+- Workspace ID : d79cd916-8e2c-4688-bd95-be38320854a0
+- Project Name : Phink-Accounting
+- Project ID   : 53d9dc0f-7d2d-4ed4-b415-d6c1f9d6bf17
+- Environment  : production (ID: 2388d236-3487-4cb4-bc4e-15655a398215)
+- Region       : europe-west4-drams3a (EU West)
+- Tjenester (alle 3 deployet og koblet):
+  1. Postgres (ID: de5c539a-a56a-4475-9b10-b76e396add08) -> Online / SUCCESS
+  2. backend  (ID: f979dba4-8bf4-4db4-b912-f1d2f4cd9e6f) -> rootDirectory=/backend, watchPatterns=backend/**,
+     startCommand="uvicorn app.main:app --host 0.0.0.0 --port 8000", healthcheck=/health,
+     vars: DATABASE_URL=${{Postgres.DATABASE_URL}}, PORT=8000, OWNER_EMAILS=riveroosx7@gmail.com,
+     SEED_DEMO_DATA=false, PUBLIC_DOMAIN=www.phink-accounting.no
+  3. frontend (ID: 02050d02-fddb-4b9d-b1b8-15ac1bdf3830) -> rootDirectory=/frontend, watchPatterns=frontend/**,
+     buildCommand="npm run build", startCommand="npm run start -- -H 0.0.0.0 -p ${PORT:-3000}",
+     vars: BACKEND_INTERNAL_URL=http://${{backend.RAILWAY_PRIVATE_DOMAIN}}:8000, NODE_ENV=production
+- Custom Domain på frontend: www.phink-accounting.no
+  - CNAME: www -> ylq6vqi7.up.railway.app
+  - TXT  : _railway-verify.www -> railway-verify=5bc4d5b9683cd1b5465a7388bbf91f1f72b41ce9a2a5716b6c020ca5856525de
+- Hvordan DeepSeek endrer Railway:
+  - Bruk Railway CLI (`railway login` med riveroosx7@gmail.com eller Railway MCP OAuth).
+  - ALDRI legg Railway API tokens eller passord i denne filen (denne filen kan synkes med git).
+
+--------------------------------------------------------------------------------
+3. DOMENESHOP & PHPMYADMIN (MARIADB 11.4) — SIKKER TILGANG
+--------------------------------------------------------------------------------
+- Domeneshop brukernavn : pepito.liindo@hotmail.com
+- Domene                : phink-accounting.no (NS: ns1.hyp.net / ns2.hyp.net / ns3.hyp.net)
+- MariaDB Host          : phinkaccountin01.mysql.domeneshop.no (Port 3306, MariaDB 11.4)
+- Database / DB-bruker  : phinkaccountin01
+- Lokal hemmelighetsfil : C:\Users\Pepito Liindo\Documents\MyGits\Phinx-accounting\backend\.env
+  (SIKKERHET: Passord og DATABASE_URL for Domeneshop ligger KUN i lokal gitignored backend/.env!
+   ALDRI kopier passord fra backend/.env inn i .log, .md eller GitHub-commits!)
+- Merk om tilkobling    : Domeneshop avviser direkte ekstern MySQL fra hjemme-IP (1045 Access denied).
+  For lokal tilkobling mot Domeneshop MariaDB bruk SSH-tunnel:
+  ssh -L 3307:phinkaccountin01.mysql.domeneshop.no:3306 <ssh-bruker>@login.domeneshop.no -N
+
+--------------------------------------------------------------------------------
+4. UFRAVIKELIGE REGLER FOR BÅDE DEEPSEEK OG GEMINI
+--------------------------------------------------------------------------------
+1. Priser: 299 kr/mnd Komplett, +59 kr/mnd Bank, 3 kr/KID, +79 kr SAF-T, 150 kr profilendring (0 kr Admin).
+2. Betaling: KUN VIPPS_BEDRIFT og FAKTURA (aldri Stripe/kort).
+3. Windows: Bruk alltid npm.cmd / npx.cmd og backend\venv\Scripts\python.exe.
+4. Next.js 16 cacheComponents: Ingen new Date()/Date.now() i initial render/useState — bruk useEffect.
+5. Aldri start llama-server uten eksplisitt forespørsel.
+6. Logg alltid nye endringer nederst i BÅDE Deepseek_Supervisor.log og Gemini_Supervisor.log etter arbeid!
+
+--------------------------------------------------------------------------------
+5. ENDRINGSLOGG (NYESTE NEDERST)
+--------------------------------------------------------------------------------
+[2026-11-20 00:30 CET] [Gemini Supervisor]
+- Opprettet produksjonsprosjekt Phink-Accounting på Railway (Postgres + backend + frontend, alle 3 Online/SUCCESS).
+- Fant at ekte domene er www.phink-accounting.no (TO c-er) og la det til på Railway frontend (CNAME ylq6vqi7.up.railway.app).
+- La til konto 7775 (Inkasso/purregebyr, skattefradrag) + alle 104 engelske NS 4102 lovpålagte kontoer (?lang=en).
+- La til språkvelger ved oppstart (EN/NO), tospråklig AI CFO (16/16 tester bestått), Glemt passord? på /login,
+  Admin-søk i Endre profil (navn/org.nr/fnr), og auto-fullføring i Live Kundeservicedesk («Er ditt problem løst nå?» -> «ja»).
+- Nullstilte lokal regnskapsdatabase til 0 kr, rettet eierfirma til Salazar Rivero Smart Things (ENK), og tømte gamle supportsaker.
+- Pushet alt til origin/main (commit c5e4124). Neste for eier: oppdater CNAME til ylq6vqi7.up.railway.app og ny TXT hos Domeneshop.

@@ -1,0 +1,55 @@
+================================================================================
+GEMINI SUPERVISOR HANDOVER & LIVE LOG — Phink Accounting
+File: C:\Users\Pepito Liindo\Documents\MyGits\Phinx-accounting\Gemini_Supervisor.log
+Counterpart Log: C:\Users\Pepito Liindo\Documents\MyGits\Phinx-accounting\Deepseek_Supervisor.log
+Onboarding Guide: C:\Users\Pepito Liindo\Documents\MyGits\Phinx-accounting\FOR_DEEPSEEK_AA_LESES.md
+================================================================================
+
+[PROSJEKTSTATUS — SIST OPPDATERT: 2026-11-20 00:30 CET av Gemini Supervisor]
+GitHub Repo : https://github.com/Salazar-Rivero-Smart-Things/Phink-accounting.git (branch: main)
+Siste commit: c5e4124
+Eier / Admin: Hollman Enrique Salazar Rivero — Salazar Rivero Smart Things (ENK) (riveroosx7@gmail.com)
+Domene      : https://www.phink-accounting.no (Domeneshop brukernavn: pepito.liindo@hotmail.com)
+
+--------------------------------------------------------------------------------
+AKTIV INFRASTRUKTUR & KONFIGURASJON
+--------------------------------------------------------------------------------
+- Railway Project : Phink-Accounting (53d9dc0f-7d2d-4ed4-b415-d6c1f9d6bf17)
+- Railway Env     : production (2388d236-3487-4cb4-bc4e-15655a398215)
+- Railway Services:
+  * Postgres : de5c539a-a56a-4475-9b10-b76e396add08 (Online)
+  * backend  : f979dba4-8bf4-4db4-b912-f1d2f4cd9e6f (Online, root=/backend, watch=backend/**)
+  * frontend : 02050d02-fddb-4b9d-b1b8-15ac1bdf3830 (Online, root=/frontend, watch=frontend/**)
+- Railway Custom Domain (frontend): www.phink-accounting.no
+  * CNAME www -> ylq6vqi7.up.railway.app
+  * TXT   _railway-verify.www -> railway-verify=5bc4d5b9683cd1b5465a7388bbf91f1f72b41ce9a2a5716b6c020ca5856525de
+- Domeneshop MariaDB 11.4:
+  * Host: phinkaccountin01.mysql.domeneshop.no | DB/User: phinkaccountin01
+  * Passord/hemmeligheter ligger KUN lokalt i gitignored backend/.env (ALDRI commit passord!)
+- Lokalt testmiljø (PC):
+  * Backend : http://127.0.0.1:8000 (DATABASE_URL=sqlite:///./phink_accounting.db, SEED_DEMO_DATA=false)
+  * Frontend: http://127.0.0.1:3000 (Next.js production build)
+  * Regnskap nullstilt til 0 kr, 104 NS 4102 kontoer (NO+EN), 0 åpne supportsaker,
+    eierprofil = Salazar Rivero Smart Things (ENK).
+
+--------------------------------------------------------------------------------
+SAMARBEIDSPROTOKOLL (GEMINI <-> DEEPSEEK)
+--------------------------------------------------------------------------------
+- Før du endrer kode lokalt: les BÅDE Gemini_Supervisor.log og Deepseek_Supervisor.log.
+- Etter endringer: kjør alltid frontend `npm.cmd run build` + backend-tester, oppdater begge loggfiler
+  med dato/klokkeslett, commit-hash, hva som ble endret og status på Railway/lokal DB.
+- Sikkerhet: Aldri skriv passord/tokens i klartekst i loggfiler eller git; bruk lokal backend/.env
+  og Railway CLI/MCP OAuth.
+
+--------------------------------------------------------------------------------
+ENDRINGSLOGG (NYESTE NEDERST)
+--------------------------------------------------------------------------------
+[2026-11-20 00:30 CET] [Gemini Supervisor]
+- Fullførte Railway deploy (Postgres + backend + frontend Online i EU West) og koblet ekte domene www.phink-accounting.no.
+- Implementerte og verifiserte (16/16 tester PASS):
+  * Oppstarts-språkvelger (Engelsk/Norsk) + EN/NO-bytteknapp + 104/104 engelske NS 4102-kontoer etter norsk lov.
+  * Tospråklig AI CFO-chatbot og bilagstolker (testet 9/9 chat + 5/5 fakturatolkning på engelsk og norsk).
+  * Konto 7775 Inkasso/purregebyr (skattefradrag) + 8150 forsinkelsesrenter.
+  * Live Kundeservicedesk: låst kundevalg, fikset «Svar kunde» (/reply), tømt gamle saker, og auto-fullføring når kunde svarer «ja» på «Er ditt problem løst nå?».
+  * «Glemt passord?» på /login + Admin-søk i Endre profil (navn, org.nr, fødselsnummer).
+- Startet lokale servere på nytt (port 8000 + port 3000) og pushet alt til origin/main.
