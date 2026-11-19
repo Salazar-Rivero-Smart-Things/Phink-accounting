@@ -2,15 +2,20 @@ from sqlalchemy import create_engine, inspect, text
 from sqlalchemy.orm import sessionmaker, declarative_base
 from app.config import settings
 
-# SQLite needs check_same_thread=False; MariaDB/MySQL needs pool_pre_ping + pool_recycle
-is_sqlite = settings.DATABASE_URL.startswith("sqlite")
+# Normalize Railway/Heroku postgres:// URLs for SQLAlchemy 2.0
+db_url = settings.DATABASE_URL
+if db_url.startswith("postgres://"):
+    db_url = "postgresql://" + db_url[len("postgres://"):]
+
+# SQLite needs check_same_thread=False; PostgreSQL/MariaDB/MySQL need pool_pre_ping + pool_recycle
+is_sqlite = db_url.startswith("sqlite")
 connect_args = {"check_same_thread": False} if is_sqlite else {}
 engine_kwargs = {"connect_args": connect_args}
 if not is_sqlite:
     engine_kwargs["pool_pre_ping"] = True
     engine_kwargs["pool_recycle"] = 280
 
-engine = create_engine(settings.DATABASE_URL, **engine_kwargs)
+engine = create_engine(db_url, **engine_kwargs)
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 
 Base = declarative_base()

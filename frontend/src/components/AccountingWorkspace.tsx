@@ -449,8 +449,12 @@ export default function AccountingWorkspace() {
       if (settRes && settRes.company_name) setCompanySettings(settRes);
       if (Array.isArray(tickRes)) {
         setTickets(tickRes);
-        if (tickRes.length > 0 && !selectedTicket) {
-          setSelectedTicket(tickRes[0]);
+        if (tickRes.length > 0) {
+          setSelectedTicket((prev) => {
+            if (!prev) return tickRes[0];
+            const updated = tickRes.find((t: SupportTicket) => t.id === prev.id);
+            return updated || prev;
+          });
         }
       }
     } catch (e) {
