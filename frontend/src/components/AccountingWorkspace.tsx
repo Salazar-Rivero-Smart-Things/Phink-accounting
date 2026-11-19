@@ -726,19 +726,30 @@ export default function AccountingWorkspace() {
   // 9. Kundeservice svar
   const handleSendOperatorReply = async () => {
     if (!selectedTicket || !operatorReply.trim()) return;
+    const replyText = operatorReply.trim();
+    const ticketId = selectedTicket.id;
     try {
-      const res = await fetch(`${API_BASE}/support/tickets/${selectedTicket.id}/messages`, {
+      const res = await fetch(`${API_BASE}/support/tickets/${ticketId}/reply`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           sender: "OPERATOR_YOU",
-          sender_name: "Deg (Kundeservice)",
-          message: operatorReply
+          sender_name: currentUser?.full_name ? `${currentUser.full_name} (Kundeservice)` : "Deg (Kundeservice)",
+          message: replyText
         })
       });
       if (res.ok) {
+        const savedMsg: TicketMessage = await res.json();
         setOperatorReply("");
+        setSelectedTicket((prev) =>
+          prev && prev.id === ticketId
+            ? { ...prev, messages: [...prev.messages, savedMsg] }
+            : prev
+        );
         fetchAllData();
+      } else {
+        const err = await res.json().catch(() => ({}));
+        alert(err.detail || "Kunne ikke sende melding til kunden.");
       }
     } catch (e) {
       alert("Kunne ikke sende melding.");

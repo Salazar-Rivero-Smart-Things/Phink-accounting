@@ -83,6 +83,7 @@ def create_support_ticket(ticket_in: SupportTicketCreate, db: Session = Depends(
     return db_ticket
 
 @router.post("/tickets/{ticket_id}/reply", response_model=TicketMessageResponse)
+@router.post("/tickets/{ticket_id}/messages", response_model=TicketMessageResponse)
 def reply_to_ticket(ticket_id: int, reply_in: TicketMessageCreate, db: Session = Depends(get_db)):
     """Du (operatør) eller kunden sender et svar i saken."""
     ticket = db.query(SupportTicket).filter(SupportTicket.id == ticket_id).first()

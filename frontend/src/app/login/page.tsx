@@ -2,7 +2,7 @@
 
 import React, { useEffect, useState } from "react";
 import Link from "next/link";
-import { Lock, Mail, ShieldCheck, ArrowRight } from "lucide-react";
+import { Lock, Mail, ShieldCheck, ArrowRight, KeyRound, CheckCircle } from "lucide-react";
 import LogoSplash from "@/components/LogoSplash";
 
 const API_BASE = process.env.NEXT_PUBLIC_API_URL || "/api";
@@ -12,6 +12,13 @@ export default function LoginPage() {
   const [password, setPassword] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  // Glemt passord state
+  const [resetMode, setResetMode] = useState<"none" | "request" | "confirm">("none");
+  const [resetEmail, setResetEmail] = useState("");
+  const [resetCode, setResetCode] = useState("");
+  const [newPassword, setNewPassword] = useState("");
+  const [resetMsg, setResetMsg] = useState<string | null>(null);
 
   useEffect(() => {
     const token = localStorage.getItem("phink_token");
@@ -40,6 +47,60 @@ export default function LoginPage() {
       window.location.href = "/app";
     } catch (err) {
       setError(err instanceof Error ? err.message : "Innlogging feilet.");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function handleRequestReset(e: React.FormEvent) {
+    e.preventDefault();
+    setBusy(true);
+    setError(null);
+    setResetMsg(null);
+    try {
+      const targetEmail = (resetEmail || email).trim();
+      const res = await fetch(`${API_BASE}/auth/forgot-password`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email: targetEmail }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.detail || "Kunne ikke sende tilbakestillingskode.");
+      setResetEmail(targetEmail);
+      setResetMsg(data.message);
+      setResetMode("confirm");
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Feil ved forespørsel om nytt passord.");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function handleConfirmReset(e: React.FormEvent) {
+    e.preventDefault();
+    setBusy(true);
+    setError(null);
+    setResetMsg(null);
+    try {
+      const res = await fetch(`${API_BASE}/auth/reset-password`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          email: resetEmail.trim(),
+          reset_code: resetCode.trim(),
+          new_password: newPassword,
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.detail || "Kunne ikke oppdatere passord.");
+      setEmail(resetEmail.trim());
+      setPassword("");
+      setResetCode("");
+      setNewPassword("");
+      setResetMode("none");
+      setResetMsg(data.message || "Passord oppdatert! Logg inn med det nye passordet.");
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Tilbakestilling feilet.");
     } finally {
       setBusy(false);
     }
@@ -86,54 +147,174 @@ export default function LoginPage() {
             </p>
           </div>
 
-          <form onSubmit={handleLogin} className="space-y-4">
-            <div>
-              <label className="block text-xs font-semibold text-slate-300 mb-1.5">E-postadresse</label>
-              <div className="relative">
-                <Mail className="w-4 h-4 text-slate-500 absolute left-3.5 top-3" />
+          {resetMode === "none" && (
+            <form onSubmit={handleLogin} className="space-y-4">
+              {resetMsg && (
+                <div className="rounded-xl border border-emerald-700 bg-emerald-950/60 px-3.5 py-2.5 text-xs text-emerald-300 flex items-center gap-2">
+                  <CheckCircle className="w-4 h-4 shrink-0" />
+                  <span>{resetMsg}</span>
+                </div>
+              )}
+
+              <div>
+                <label className="block text-xs font-semibold text-slate-300 mb-1.5">E-postadresse</label>
+                <div className="relative">
+                  <Mail className="w-4 h-4 text-slate-500 absolute left-3.5 top-3" />
+                  <input
+                    type="email"
+                    required
+                    autoComplete="email"
+                    value={email}
+                    onChange={(e) => setEmail(e.target.value)}
+                    placeholder="din@epost.no"
+                    className="w-full rounded-xl border border-slate-700 bg-slate-950 pl-10 pr-3.5 py-2.5 text-sm text-white placeholder-slate-500 focus:border-amber-500 focus:outline-none"
+                  />
+                </div>
+              </div>
+
+              <div>
+                <div className="flex items-center justify-between mb-1.5">
+                  <label className="block text-xs font-semibold text-slate-300">Passord</label>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setResetEmail(email);
+                      setError(null);
+                      setResetMsg(null);
+                      setResetMode("request");
+                    }}
+                    className="text-xs text-amber-400 hover:text-amber-300 hover:underline font-medium cursor-pointer"
+                  >
+                    Glemt passord?
+                  </button>
+                </div>
+                <div className="relative">
+                  <Lock className="w-4 h-4 text-slate-500 absolute left-3.5 top-3" />
+                  <input
+                    type="password"
+                    required
+                    autoComplete="current-password"
+                    value={password}
+                    onChange={(e) => setPassword(e.target.value)}
+                    placeholder="••••••••"
+                    className="w-full rounded-xl border border-slate-700 bg-slate-950 pl-10 pr-3.5 py-2.5 text-sm text-white placeholder-slate-500 focus:border-amber-500 focus:outline-none"
+                  />
+                </div>
+              </div>
+
+              {error && (
+                <div className="rounded-xl border border-red-800 bg-red-950/60 px-3.5 py-2.5 text-xs text-red-300">
+                  {error}
+                </div>
+              )}
+
+              <button
+                type="submit"
+                disabled={busy}
+                className="w-full rounded-xl bg-gradient-to-r from-amber-500 to-yellow-500 hover:from-amber-400 hover:to-yellow-400 py-3 text-sm font-bold text-slate-950 shadow-lg flex items-center justify-center gap-2 disabled:opacity-50 cursor-pointer"
+              >
+                <span>{busy ? "Logger inn…" : "Logg inn i regnskapsprogrammet"}</span>
+                <ArrowRight className="w-4 h-4" />
+              </button>
+            </form>
+          )}
+
+          {resetMode === "request" && (
+            <form onSubmit={handleRequestReset} className="space-y-4">
+              <div className="rounded-xl border border-amber-500/30 bg-amber-500/10 p-3 text-xs text-amber-200 flex items-start gap-2">
+                <KeyRound className="w-4 h-4 shrink-0 mt-0.5 text-amber-400" />
+                <span>Skriv inn din registrerte e-postadresse for å få en 6-sifret tilbakestillingskode.</span>
+              </div>
+              <div>
+                <label className="block text-xs font-semibold text-slate-300 mb-1.5">E-postadresse</label>
                 <input
                   type="email"
                   required
-                  autoComplete="email"
-                  value={email}
-                  onChange={(e) => setEmail(e.target.value)}
+                  value={resetEmail}
+                  onChange={(e) => setResetEmail(e.target.value)}
                   placeholder="din@epost.no"
-                  className="w-full rounded-xl border border-slate-700 bg-slate-950 pl-10 pr-3.5 py-2.5 text-sm text-white placeholder-slate-500 focus:border-amber-500 focus:outline-none"
+                  className="w-full rounded-xl border border-slate-700 bg-slate-950 px-3.5 py-2.5 text-sm text-white placeholder-slate-500 focus:border-amber-500 focus:outline-none"
                 />
               </div>
-            </div>
+              {error && (
+                <div className="rounded-xl border border-red-800 bg-red-950/60 px-3.5 py-2.5 text-xs text-red-300">
+                  {error}
+                </div>
+              )}
+              <button
+                type="submit"
+                disabled={busy}
+                className="w-full rounded-xl bg-gradient-to-r from-amber-500 to-yellow-500 hover:from-amber-400 hover:to-yellow-400 py-3 text-sm font-bold text-slate-950 cursor-pointer disabled:opacity-50"
+              >
+                {busy ? "Sender kode…" : "Send tilbakestillingskode"}
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setError(null);
+                  setResetMode("none");
+                }}
+                className="w-full text-center text-xs text-slate-400 hover:text-white cursor-pointer"
+              >
+                ← Tilbake til innlogging
+              </button>
+            </form>
+          )}
 
-            <div>
-              <label className="block text-xs font-semibold text-slate-300 mb-1.5">Passord</label>
-              <div className="relative">
-                <Lock className="w-4 h-4 text-slate-500 absolute left-3.5 top-3" />
+          {resetMode === "confirm" && (
+            <form onSubmit={handleConfirmReset} className="space-y-4">
+              {resetMsg && (
+                <div className="rounded-xl border border-emerald-700 bg-emerald-950/60 px-3.5 py-2.5 text-xs text-emerald-300">
+                  {resetMsg}
+                </div>
+              )}
+              <div>
+                <label className="block text-xs font-semibold text-slate-300 mb-1.5">6-sifret tilbakestillingskode</label>
+                <input
+                  type="text"
+                  required
+                  value={resetCode}
+                  onChange={(e) => setResetCode(e.target.value)}
+                  placeholder="123456"
+                  className="w-full rounded-xl border border-slate-700 bg-slate-950 px-3.5 py-2.5 text-sm font-mono tracking-widest text-white placeholder-slate-500 focus:border-amber-500 focus:outline-none"
+                />
+              </div>
+              <div>
+                <label className="block text-xs font-semibold text-slate-300 mb-1.5">Nytt passord (minst 6 tegn)</label>
                 <input
                   type="password"
                   required
-                  autoComplete="current-password"
-                  value={password}
-                  onChange={(e) => setPassword(e.target.value)}
+                  minLength={6}
+                  value={newPassword}
+                  onChange={(e) => setNewPassword(e.target.value)}
                   placeholder="••••••••"
-                  className="w-full rounded-xl border border-slate-700 bg-slate-950 pl-10 pr-3.5 py-2.5 text-sm text-white placeholder-slate-500 focus:border-amber-500 focus:outline-none"
+                  className="w-full rounded-xl border border-slate-700 bg-slate-950 px-3.5 py-2.5 text-sm text-white placeholder-slate-500 focus:border-amber-500 focus:outline-none"
                 />
               </div>
-            </div>
-
-            {error && (
-              <div className="rounded-xl border border-red-800 bg-red-950/60 px-3.5 py-2.5 text-xs text-red-300">
-                {error}
-              </div>
-            )}
-
-            <button
-              type="submit"
-              disabled={busy}
-              className="w-full rounded-xl bg-gradient-to-r from-amber-500 to-yellow-500 hover:from-amber-400 hover:to-yellow-400 py-3 text-sm font-bold text-slate-950 shadow-lg flex items-center justify-center gap-2 disabled:opacity-50 cursor-pointer"
-            >
-              <span>{busy ? "Logger inn…" : "Logg inn i regnskapsprogrammet"}</span>
-              <ArrowRight className="w-4 h-4" />
-            </button>
-          </form>
+              {error && (
+                <div className="rounded-xl border border-red-800 bg-red-950/60 px-3.5 py-2.5 text-xs text-red-300">
+                  {error}
+                </div>
+              )}
+              <button
+                type="submit"
+                disabled={busy}
+                className="w-full rounded-xl bg-gradient-to-r from-amber-500 to-yellow-500 hover:from-amber-400 hover:to-yellow-400 py-3 text-sm font-bold text-slate-950 cursor-pointer disabled:opacity-50"
+              >
+                {busy ? "Lagrer nytt passord…" : "Lagre nytt passord"}
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setError(null);
+                  setResetMode("none");
+                }}
+                className="w-full text-center text-xs text-slate-400 hover:text-white cursor-pointer"
+              >
+                ← Tilbake til innlogging
+              </button>
+            </form>
+          )}
 
           <div className="pt-4 border-t border-slate-800 text-center text-xs text-slate-400 space-y-2">
             <div className="flex items-center justify-center gap-1.5 text-emerald-400">

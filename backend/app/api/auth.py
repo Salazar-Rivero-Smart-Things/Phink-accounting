@@ -553,3 +553,151 @@ def update_user_profile(
         "fee": fee_info,
         "message": f"Administrator oppdaterte profilen for {target.email} (0 kr).",
     }
+
+
+# -------------------------------------------------------------
+# GLEMT PASSORD / TILBAKESTILLING AV PASSORD
+# -------------------------------------------------------------
+import os as _os
+import smtplib as _smtplib
+from email.message import EmailMessage as _EmailMessage
+
+_RESET_CODES: dict[str, tuple[str, float]] = {}
+
+
+class ForgotPasswordRequest(BaseModel):
+    email: str = Field(..., min_length=4, max_length=200)
+
+
+class ResetPasswordRequest(BaseModel):
+    email: str = Field(..., min_length=4, max_length=200)
+    reset_code: str = Field(..., min_length=4, max_length=32)
+    new_password: str = Field(..., min_length=6, max_length=128)
+
+
+def _try_send_reset_email(to_email: str, code: str) -> bool:
+    smtp_host = _os.getenv("SMTP_HOST", "").strip()
+    smtp_user = _os.getenv("SMTP_USER", "").strip()
+    smtp_pass = _os.getenv("SMTP_PASSWORD", "").strip()
+    smtp_port = int(_os.getenv("SMTP_PORT", "587") or "587")
+    smtp_from = _os.getenv("SMTP_FROM", smtp_user or "noreply@phink-acounting.no").strip()
+    if not (smtp_host and smtp_user and smtp_pass):
+        return False
+    try:
+        msg = _EmailMessage()
+        msg["Subject"] = "Tilbakestilling av passord — Phink Accounting"
+        msg["From"] = smtp_from
+        msg["To"] = to_email
+        msg.set_content(
+            f"Hei!\n\n"
+            f"Du (eller noen som oppga din e-post) ba om å tilbakestille passordet hos Phink Accounting (www.phink-acounting.no).\n\n"
+            f"Din engangskode (gyldig i 30 minutter): {code}\n\n"
+            f"Skriv inn koden og velg et nytt passord på innloggingssiden.\n"
+            f"Hvis du ikke ba om dette, kan du se bort fra denne e-posten.\n"
+        )
+        with _smtplib.SMTP(smtp_host, smtp_port, timeout=8) as server:
+            server.starttls()
+            server.login(smtp_user, smtp_pass)
+            server.send_message(msg)
+        return True
+    except Exception:
+        return False
+
+
+@router.post("/forgot-password")
+def forgot_password(req: ForgotPasswordRequest, db: Session = Depends(get_db)):
+    """
+    Genererer en 6-sifret engangskode (gyldig i 30 min) for tilbakestilling av passord.
+    Sender e-post automatisk når SMTP er konfigurert, og oppretter samtidig sak i
+    Administrator Kundeservice Desk dersom SMTP ikke er satt opp ennå.
+    """
+    email = req.email.strip().lower()
+    user = db.query(User).filter(User.email == email).first()
+
+    # Av sikkerhetsgrunner returnerer vi alltid et nøytralt svar hvis kontoen ikke finnes
+    if not user:
+        return {
+            "ok": True,
+            "email_sent": False,
+            "message": "Dersom e-postadressen er registrert, er en 6-sifret tilbakestillingskode opprettet (gyldig i 30 min).",
+        }
+
+    code = f"{secrets.randbelow(900000) + 100000}"
+    expires_ts = (datetime.utcnow() + timedelta(minutes=30)).timestamp()
+    _RESET_CODES[email] = (code, expires_ts)
+
+    email_sent = _try_send_reset_email(email, code)
+    if not email_sent:
+        ticket = SupportTicket(
+            customer_name=user.company_name or user.full_name,
+            customer_email=user.email,
+            subject=f"Glemt passord — engangskode for {user.email}",
+            category="ACCOUNT_SECURITY",
+            status="OPEN",
+            priority="HIGH",
+            assigned_to="Administrator (Deg)",
+        )
+        db.add(ticket)
+        db.flush()
+        db.add(TicketMessage(
+            ticket_id=ticket.id,
+            sender="SYSTEM",
+            sender_name="Phink Sikkerhet",
+            message=(
+                f"Brukeren ba om tilbakestilling av passord.\n"
+                f"Engangskode (gyldig 30 min): {code}\n"
+                f"Gi koden til brukeren etter å ha bekreftet identiteten, eller konfigurer SMTP_HOST/SMTP_USER/SMTP_PASSWORD for automatisk e-post."
+            ),
+        ))
+
+    db.add(AuditLog(
+        action="PASSWORD_RESET_REQUESTED",
+        details=f"Tilbakestillingskode generert for {email} (SMTP sendt: {'ja' if email_sent else 'nei — sendt til Administrator Desk'}).",
+        ai_assisted=False,
+    ))
+    db.commit()
+
+    return {
+        "ok": True,
+        "email_sent": email_sent,
+        "message": (
+            "En 6-sifret tilbakestillingskode er sendt til e-posten din (gyldig i 30 minutter)."
+            if email_sent
+            else "Tilbakestillingskode er generert (gyldig i 30 min) og sendt til Administrator i Kundeservice Desk. Skriv inn koden under sammen med nytt passord."
+        ),
+    }
+
+
+@router.post("/reset-password")
+def reset_password(req: ResetPasswordRequest, db: Session = Depends(get_db)):
+    """Verifiserer 6-sifret kode og lagrer nytt passord."""
+    email = req.email.strip().lower()
+    entry = _RESET_CODES.get(email)
+    if not entry:
+        raise HTTPException(status_code=400, detail="Ingen aktiv tilbakestillingskode funnet. Be om en ny kode først.")
+
+    expected_code, expires_ts = entry
+    if datetime.utcnow().timestamp() > expires_ts:
+        _RESET_CODES.pop(email, None)
+        raise HTTPException(status_code=400, detail="Tilbakestillingskoden er utløpt. Be om en ny kode.")
+
+    if not hmac.compare_digest(req.reset_code.strip(), expected_code):
+        raise HTTPException(status_code=400, detail="Feil tilbakestillingskode. Sjekk koden og prøv igjen.")
+
+    user = db.query(User).filter(User.email == email).first()
+    if not user:
+        raise HTTPException(status_code=404, detail="Brukerkonto ikke funnet.")
+
+    user.password_hash = hash_password(req.new_password)
+    _RESET_CODES.pop(email, None)
+    db.add(AuditLog(
+        action="PASSWORD_RESET_COMPLETED",
+        details=f"Passord ble tilbakestilt for {email}.",
+        ai_assisted=False,
+    ))
+    db.commit()
+
+    return {
+        "ok": True,
+        "message": "Passordet ditt er nå oppdatert! Du kan logge inn med det nye passordet.",
+    }
