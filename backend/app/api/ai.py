@@ -70,11 +70,16 @@ async def upload_invoice_pdf(file: UploadFile = File(...)):
 
 @router.post("/chat", response_model=AIChatResponse)
 async def chat_with_cfo(req: AIChatRequest, db: Session = Depends(get_db)):
-    """Chat med Llama som bedriftens digitale økonomisjef / CFO."""
+    """Chat med Llama som bedriftens digitale økonomisjef / CFO (støtter både engelsk og norsk)."""
     summary = get_financial_summary(db)
     summary_dict = summary.model_dump()
-    reply = await llama_service.answer_cfo_question(req.message, summary_dict)
+    reply = await llama_service.answer_cfo_question(req.message, summary_dict, lang=req.lang)
+    is_en = llama_service._detect_english(req.message, req.lang)
     return AIChatResponse(
         reply=reply,
-        sources_considered=["Nøkkeltall regnskap", "Norsk standard kontoplan NS 4102", "Bankavstemning"]
+        sources_considered=(
+            ["Live Financial Summary", "Norwegian Standard Chart of Accounts (NS 4102 — English)", "Norwegian Accounting Act & VAT Rules"]
+            if is_en
+            else ["Nøkkeltall regnskap", "Norsk standard kontoplan NS 4102", "Bankavstemning"]
+        ),
     )

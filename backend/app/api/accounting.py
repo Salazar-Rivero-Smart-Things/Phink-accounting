@@ -10,6 +10,7 @@ import uuid
 import shutil
 
 from app.database import get_db
+from app.accounting.chart_of_accounts import get_localized_account_fields
 from app.api.auth import decode_access_token, is_owner_email
 from app.models.accounting import (
     Account, Voucher, TransactionLine, AuditLog,
@@ -44,9 +45,21 @@ os.makedirs(UPLOAD_DIR, exist_ok=True)
 # -------------------------------------------------------------
 
 @router.get("/accounts", response_model=List[AccountResponse])
-def get_accounts(db: Session = Depends(get_db)):
-    """Henter alle kontoer i kontoplanen."""
-    return db.query(Account).order_by(Account.account_number).all()
+def get_accounts(lang: str = "nb", db: Session = Depends(get_db)):
+    """Henter alle kontoer i kontoplanen (støtter lang=nb eller lang=en for offisielle engelske NS 4102-poster)."""
+    rows = db.query(Account).order_by(Account.account_number).all()
+    if (lang or "nb").lower().startswith("en"):
+        return [
+            AccountResponse(
+                account_number=a.account_number,
+                name=get_localized_account_fields(a.account_number, a.name, a.description, "en")[0],
+                account_type=a.account_type,
+                vat_code=a.vat_code,
+                description=get_localized_account_fields(a.account_number, a.name, a.description, "en")[1],
+            )
+            for a in rows
+        ]
+    return rows
 
 @router.post("/accounts", response_model=AccountResponse)
 def create_account(account: AccountCreate, db: Session = Depends(get_db)):
@@ -957,21 +970,23 @@ def get_vat_report(db: Session = Depends(get_db)):
 # -------------------------------------------------------------
 
 @router.get("/reports/income-statement", response_model=IncomeStatementResponse)
-def get_income_statement(db: Session = Depends(get_db)):
+def get_income_statement(lang: str = "nb", db: Session = Depends(get_db)):
     """Genererer fullstendig resultatregnskap (Driftsinntekter, Driftskostnader, Resultat)."""
     lines = db.query(TransactionLine, Account).join(Account, TransactionLine.account_number == Account.account_number).all()
+    is_en = (lang or "nb").lower().startswith("en")
 
     rev_map = {}
     exp_map = {}
 
     for line, acc in lines:
+        loc_name, _ = get_localized_account_fields(acc.account_number, acc.name, acc.description, lang)
         if 3000 <= acc.account_number < 4000:
             val = line.credit - line.debit
-            rev_map[acc.account_number] = rev_map.get(acc.account_number, {"name": acc.name, "amount": 0.0})
+            rev_map[acc.account_number] = rev_map.get(acc.account_number, {"name": loc_name, "amount": 0.0})
             rev_map[acc.account_number]["amount"] += val
         elif 4000 <= acc.account_number < 8000:
             val = line.debit - line.credit
-            exp_map[acc.account_number] = exp_map.get(acc.account_number, {"name": acc.name, "amount": 0.0})
+            exp_map[acc.account_number] = exp_map.get(acc.account_number, {"name": loc_name, "amount": 0.0})
             exp_map[acc.account_number]["amount"] += val
 
     rev_lines = [ReportLine(account_number=k, account_name=v["name"], amount=round(v["amount"], 2)) for k, v in sorted(rev_map.items())]
@@ -982,29 +997,39 @@ def get_income_statement(db: Session = Depends(get_db)):
 
     return IncomeStatementResponse(
         sections=[
-            IncomeStatementSection(title="Driftsinntekter (Salgsinntekter)", lines=rev_lines, total=round(total_rev, 2)),
-            IncomeStatementSection(title="Driftskostnader (Varekjøp, IT, Administrasjon)", lines=exp_lines, total=round(total_exp, 2))
+            IncomeStatementSection(
+                title="Operating Revenues (Sales)" if is_en else "Driftsinntekter (Salgsinntekter)",
+                lines=rev_lines,
+                total=round(total_rev, 2),
+            ),
+            IncomeStatementSection(
+                title="Operating Expenses (COGS, IT, Payroll, Administration)" if is_en else "Driftskostnader (Varekjøp, IT, Administrasjon)",
+                lines=exp_lines,
+                total=round(total_exp, 2),
+            ),
         ],
         net_profit=round(total_rev - total_exp, 2)
     )
 
 @router.get("/reports/balance-sheet", response_model=BalanceSheetResponse)
-def get_balance_sheet(db: Session = Depends(get_db)):
+def get_balance_sheet(lang: str = "nb", db: Session = Depends(get_db)):
     """Genererer fullstendig balanserapport (Eiendeler vs Egenkapital og Gjeld)."""
     lines = db.query(TransactionLine, Account).join(Account, TransactionLine.account_number == Account.account_number).all()
+    is_en = (lang or "nb").lower().startswith("en")
 
     asset_map = {}
     liability_map = {}
     period_profit = 0.0
 
     for line, acc in lines:
+        loc_name, _ = get_localized_account_fields(acc.account_number, acc.name, acc.description, lang)
         if 1000 <= acc.account_number < 2000:
             val = line.debit - line.credit
-            asset_map[acc.account_number] = asset_map.get(acc.account_number, {"name": acc.name, "amount": 0.0})
+            asset_map[acc.account_number] = asset_map.get(acc.account_number, {"name": loc_name, "amount": 0.0})
             asset_map[acc.account_number]["amount"] += val
         elif 2000 <= acc.account_number < 3000:
             val = line.credit - line.debit
-            liability_map[acc.account_number] = liability_map.get(acc.account_number, {"name": acc.name, "amount": 0.0})
+            liability_map[acc.account_number] = liability_map.get(acc.account_number, {"name": loc_name, "amount": 0.0})
             liability_map[acc.account_number]["amount"] += val
         elif 3000 <= acc.account_number < 4000:
             period_profit += (line.credit - line.debit)
@@ -1014,14 +1039,26 @@ def get_balance_sheet(db: Session = Depends(get_db)):
     asset_lines = [ReportLine(account_number=k, account_name=v["name"], amount=round(v["amount"], 2)) for k, v in sorted(asset_map.items())]
     liab_lines = [ReportLine(account_number=k, account_name=v["name"], amount=round(v["amount"], 2)) for k, v in sorted(liability_map.items())]
     if abs(period_profit) >= 0.01:
-        liab_lines.append(ReportLine(account_number=2050, account_name="Udisponert resultat (hittil i år)", amount=round(period_profit, 2)))
+        liab_lines.append(ReportLine(
+            account_number=2050,
+            account_name="Unallocated Net Profit (YTD)" if is_en else "Udisponert resultat (hittil i år)",
+            amount=round(period_profit, 2),
+        ))
 
     total_assets = round(sum(l.amount for l in asset_lines), 2)
     total_liab = round(sum(l.amount for l in liab_lines), 2)
 
     return BalanceSheetResponse(
-        assets=BalanceSheetSection(title="Eiendeler (Omløpsmidler & Bank)", lines=asset_lines, total=total_assets),
-        equity_and_liabilities=BalanceSheetSection(title="Egenkapital og Gjeld", lines=liab_lines, total=total_liab),
+        assets=BalanceSheetSection(
+            title="Assets (Current Assets & Bank)" if is_en else "Eiendeler (Omløpsmidler & Bank)",
+            lines=asset_lines,
+            total=total_assets,
+        ),
+        equity_and_liabilities=BalanceSheetSection(
+            title="Equity and Liabilities" if is_en else "Egenkapital og Gjeld",
+            lines=liab_lines,
+            total=total_liab,
+        ),
         is_balanced=abs(total_assets - total_liab) < 0.05
     )
 

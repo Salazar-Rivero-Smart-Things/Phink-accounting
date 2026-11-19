@@ -124,6 +124,139 @@ DEFAULT_ACCOUNTS = [
     {"account_number": 8300, "name": "Betalbar skatt", "account_type": "EXPENSE", "vat_code": "NONE", "description": "Skattekostnad på resultat"}
 ]
 
+# Official English translations of Norwegian Standard Chart of Accounts (NS 4102)
+# Compliant with the Norwegian Accounting Act (Regnskapsloven) & Bookkeeping Act (Bokføringsloven)
+ENGLISH_ACCOUNTS_MAP = {
+    # 1xxx: Assets (Non-current Assets, Inventory, Receivables & Bank)
+    1000: ("Research and Development", "Intangible fixed assets (R&D)"),
+    1100: ("Buildings and Real Property", "Real estate and commercial property"),
+    1200: ("Machinery and Plant", "Tangible fixed operating assets"),
+    1230: ("Company Vehicles", "Cars, vans and transport vehicles"),
+    1250: ("Furniture and Fixtures", "Long-term office and store fixtures"),
+    1280: ("Office Equipment and IT Hardware", "Servers and capitalised IT equipment"),
+    1400: ("Inventory — Raw Materials", "Raw material stock"),
+    1460: ("Inventory — Goods for Resale", "Merchandise held for resale"),
+    1500: ("Accounts Receivable (Trade Debtors)", "Unpaid customer sales invoices"),
+    1580: ("Provision for Doubtful Debts", "Allowance for bad/uncertain receivables"),
+    1700: ("Prepaid Rent", "Accrual/prepayment for office rent"),
+    1710: ("Prepaid Insurance", "Accrual/prepayment for insurance policies"),
+    1900: ("Cash on Hand / Petty Cash", "Physical cash register"),
+    1920: ("Operating Bank Account", "Primary business bank account"),
+    1950: ("Restricted Tax Withholding Bank Account", "Statutory restricted account for employee PAYE withholding tax (Tax Payment Act § 5-12)"),
+
+    # 2xxx: Equity, Liabilities, Taxes, VAT & Payroll
+    2000: ("Share Capital / Paid-in Equity", "Company share capital / owner's paid-in equity"),
+    2050: ("Retained Earnings / Other Equity", "Accumulated earned equity"),
+    2220: ("Long-term Bank Loans", "Long-term debt to credit institutions"),
+    2380: ("Bank Overdraft Facility", "Short-term operating credit line"),
+    2400: ("Accounts Payable (Trade Creditors)", "Unpaid supplier invoices"),
+    2500: ("Income Tax Payable (Not Assessed)", "Accrued corporate income tax"),
+    2600: ("Employee Withholding Tax Payable (PAYE)", "Tax deducted from employee salaries"),
+    2650: ("Trade Union Dues Payable", "Union fees deducted from salaries"),
+    2700: ("Output VAT — High Rate (25%)", "VAT collected on standard-rate sales"),
+    2701: ("Output VAT — Medium Rate (15%)", "VAT collected on food & beverages"),
+    2702: ("Output VAT — Low Rate (12%)", "VAT collected on passenger transport, lodging & culture"),
+    2705: ("Output VAT — Foreign Services (Reverse Charge 25%)", "Calculated output VAT on remotely delivered services purchased abroad"),
+    2710: ("Input VAT — Deductible (25%)", "Deductible VAT on standard-rate purchases"),
+    2711: ("Input VAT — Deductible (15%)", "Deductible VAT on food & groceries"),
+    2712: ("Input VAT — Deductible (12%)", "Deductible VAT on passenger transport & hotel"),
+    2715: ("Input VAT — Foreign Services (Reverse Charge Deduction 25%)", "Deductible input VAT on foreign services (reverse charge)"),
+    2740: ("VAT Settlement Account", "VAT clearing account with the Norwegian Tax Administration (Skatteetaten)"),
+    2770: ("Employer's National Insurance Contributions Payable (AGA)", "Accrued employer payroll tax"),
+    2780: ("Accrued Employer's National Insurance on Holiday Pay", "Accrued AGA on earned holiday pay"),
+    2800: ("Proposed Dividends Payable", "Approved dividends payable to shareholders"),
+    2900: ("Customer Prepayments / Deferred Revenue", "Advance payments received from customers"),
+    2910: ("Debt to Employees and Owners (Expense Reimbursements)", "Out-of-pocket expenses and travel claims"),
+    2930: ("Net Salaries Payable", "Net payroll ready for bank payout"),
+    2940: ("Holiday Pay Payable", "Accrued statutory holiday pay owed to employees"),
+    2960: ("Accrued Expenses (incl. Mandatory Pension OTP)", "Accrued operating and pension liabilities"),
+
+    # 3xxx: Operating Revenues
+    3000: ("Sales Revenue — Goods (25% VAT)", "Taxable sale of goods at standard rate"),
+    3020: ("Sales Revenue — Services & Consulting (25% VAT)", "Taxable sale of services and billable hours"),
+    3030: ("Sales Revenue — Food & Beverages (15% VAT)", "Sale of food and groceries"),
+    3040: ("Sales Revenue — Transport, Lodging & Culture (12% VAT)", "Passenger transport, hotel and cultural tickets"),
+    3100: ("Sales Revenue — Zero-Rated / Export (0% VAT)", "VAT-exempt sales and international exports"),
+    3200: ("Sales Revenue — Outside VAT Scope", "Health, education and financial services"),
+    3400: ("Government Grants and Subsidies", "Public grants and reimbursements"),
+    3600: ("Rental Income — Real Property", "Income from leasing premises"),
+
+    # 4xxx: Cost of Goods Sold & Subcontractors
+    4000: ("Purchases of Raw Materials & Components", "Materials for production and projects"),
+    4300: ("Purchases of Goods for Resale", "Standard merchandise purchases"),
+    4310: ("Purchases of Goods — Foreign Import (Tax-Deductible)", "Tax-deductible imported goods from abroad (import VAT)"),
+    4360: ("Freight, Customs & Forwarding on Purchases", "Inbound freight and customs clearance"),
+    4500: ("Subcontractors & External Services", "Hired contractors and project subcontractors"),
+    4510: ("Foreign Subcontractors & Services (Tax-Deductible / Reverse Charge)", "Tax-deductible foreign consulting and remote services"),
+
+    # 5xxx: Payroll, Holiday Pay, Employer Tax & Personnel
+    5000: ("Salaries and Wages", "Fixed salaries and hourly wages"),
+    5010: ("Overtime Pay", "Paid overtime wages"),
+    5020: ("Employee Bonuses & Commissions", "Performance bonuses and sales commissions"),
+    5180: ("Holiday Pay Expense (12%)", "Statutory accrued holiday pay"),
+    5190: ("Employer's National Insurance on Holiday Pay", "AGA on accrued holiday pay"),
+    5330: ("Board of Directors' Fees", "Remuneration to board members"),
+    5400: ("Employer's National Insurance Contributions (AGA)", "Employer payroll tax (Zones 1–5)"),
+    5420: ("Mandatory Occupational Pension Expense (OTP)", "Reportable statutory pension contributions"),
+    5800: ("Sick Pay Reimbursements from NAV", "Credited upon NAV sick-leave refund"),
+    5900: ("Employee Gifts & Recognition", "Staff and anniversary gifts"),
+    5920: ("Occupational Injury & Personnel Insurance", "Statutory workers' compensation insurance"),
+    5950: ("Employee Welfare & Occupational Health (HSE)", "Staff welfare and occupational health services"),
+
+    # 6xxx: Operating Expenses (Premises, Tools, IT, Accounting/Legal, Office, Telecom)
+    6010: ("Depreciation of Machinery, Vehicles & Fixtures", "Ordinary fixed-asset depreciation"),
+    6100: ("Outbound Freight & Shipping", "Delivery freight to customers"),
+    6300: ("Rent of Premises", "Office and warehouse rent"),
+    6340: ("Electricity, Heating & Utilities", "Power and heating for premises"),
+    6360: ("Cleaning & Janitorial Services", "Cleaning and maintenance of premises"),
+    6400: ("Equipment & Machinery Rental", "Rental of operating equipment"),
+    6440: ("Vehicle Leasing", "Leasing of company cars and vans"),
+    6510: ("Hand Tools & Minor Equipment", "Tools below NOK 30,000 capitalisation threshold"),
+    6540: ("IT Operations, Software & Cloud Licences (incl. Small Equipment)", "SaaS, servers, software and equipment < NOK 30,000"),
+    6550: ("Operating Materials & Software Licences", "Software subscriptions and licences"),
+    6555: ("Foreign Software, Cloud & SaaS (Tax-Deductible / Reverse Charge)", "Tax-deductible foreign software/cloud (Google, AWS, GitHub, OpenAI — reverse charge VAT)"),
+    6620: ("Repair & Maintenance of Equipment", "Maintenance of machinery and equipment"),
+    6700: ("Audit Fees", "Statutory auditor fees"),
+    6720: ("Accounting, Legal & Advisory Fees", "Bookkeeping, legal counsel and consulting"),
+    6800: ("Office Supplies & Stationery", "Small office consumables and printing"),
+    6860: ("Courses, Seminars & Professional Training", "Conferences and staff training"),
+    6900: ("Telephone & Mobile Subscriptions", "Mobile plans and telecommunications"),
+    6940: ("Internet & Data Communications", "Broadband, fibre and network lines"),
+
+    # 7xxx: Vehicles, Travel, Marketing, Representation, Insurance & Fees
+    7000: ("Fuel & EV Charging — Company Vehicles", "Petrol, diesel and electric vehicle charging"),
+    7020: ("Vehicle Maintenance & Servicing", "Workshop servicing and tyres"),
+    7080: ("Mileage Allowance (Private Vehicle)", "Tax-free mileage reimbursement at Norwegian state rates"),
+    7140: ("Business Travel & Lodging (Domestic)", "Flights, trains, taxis and hotels (12% VAT)"),
+    7145: ("Foreign Business Travel & Hotel (0% NO VAT, 100% Tax-Deductible)", "Tax-deductible foreign business travel; foreign VAT not reclaimed in Norway, full cost tax-deductible"),
+    7150: ("Per Diem / Travel Subsistence (Non-Reportable)", "Tax-free daily travel allowances at state rates"),
+    7320: ("Advertising & Marketing (Domestic)", "Domestic marketing and campaigns"),
+    7325: ("Foreign Advertising & Marketing — Meta/Google Ads (Tax-Deductible)", "Tax-deductible foreign ads (Meta Ireland, Google Ireland — 25% reverse charge VAT)"),
+    7350: ("Client Entertainment — Tax-Deductible", "Modest client hospitality (0% VAT deduction)"),
+    7360: ("Client Entertainment — Non-Deductible", "Non-deductible representation costs"),
+    7400: ("Memberships & Trade Association Fees", "Industry and employer association dues"),
+    7500: ("Business & Liability Insurance Premiums", "Commercial, liability and property insurance (0% VAT)"),
+    7770: ("Bank & Payment Processing Fees", "Bank transaction fees and Vipps Bedrift fees"),
+    7775: ("Debt Collection & Reminder Fees — Inkasso (0% VAT, Tax-Deductible)", "Tax-deductible collection, reminder and recovery fees on business invoices (0% VAT)"),
+    7830: ("Confirmed Bad Debt Losses", "Final write-off of uncollectible trade receivables"),
+
+    # 8xxx: Financial Items & Corporate Tax
+    8050: ("Interest Income", "Interest earned on bank deposits"),
+    8060: ("Foreign Exchange Gain (Agio)", "Realised currency exchange gains"),
+    8150: ("Interest Expenses & Late Payment Interest (incl. Debt Collection)", "Loan interest and statutory late-payment/collection interest (tax-deductible)"),
+    8160: ("Foreign Exchange Loss (Disagio)", "Realised currency exchange losses"),
+    8300: ("Income Tax Expense", "Corporate income tax on profit"),
+}
+
+
+def get_localized_account_fields(account_number: int, fallback_name: str, fallback_desc: str | None, lang: str = "nb") -> tuple[str, str | None]:
+    """Returns official English NS 4102 account name & description when lang='en', else Norwegian."""
+    if (lang or "nb").lower().startswith("en") and account_number in ENGLISH_ACCOUNTS_MAP:
+        en_name, en_desc = ENGLISH_ACCOUNTS_MAP[account_number]
+        return en_name, en_desc
+    return fallback_name, fallback_desc
+
+
 def seed_default_accounts(db: Session):
     """Sikrer at hele Conta/NS 4102 kontoplanen er opprettet i databasen ved oppstart."""
     for item in DEFAULT_ACCOUNTS:

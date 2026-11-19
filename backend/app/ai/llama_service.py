@@ -207,32 +207,162 @@ class LlamaService:
 
         return self._fallback_invoice_parser(text)
 
-    async def answer_cfo_question(self, question: str, accounting_summary: Dict[str, Any]) -> str:
-        """Svarer på spørsmål som Digital CFO basert på SKILLS.md og sanntidstall."""
+    def _detect_english(self, text: str, explicit_lang: Optional[str] = None) -> bool:
+        """Auto-detects English questions or honors explicit lang='en'/'nb'."""
+        if explicit_lang:
+            return explicit_lang.lower().startswith("en")
+        q = f" {(text or '').lower()} "
+        norwegian_markers = [" hva ", " hvordan ", " hvilken ", " konto ", " regnskap", " bilag", " mva", " lønn", " skatt", " fradrag", " utland", " inkasso", " saldo", " fører ", " bokfør", "æ", "ø", "å"]
+        english_markers = [" what ", " how ", " which ", " account ", " accounting", " voucher", " vat ", " payroll", " tax ", " deduct", " foreign ", " debt collection", " collection fee", " balance", " book ", " record ", " expense", " invoice", " profit", " bank ", " saft", " saf-t", " reverse charge", " interest"]
+        en_score = sum(1 for m in english_markers if m in q)
+        no_score = sum(1 for m in norwegian_markers if m in q)
+        return en_score > no_score
+
+    async def answer_cfo_question(
+        self,
+        question: str,
+        accounting_summary: Dict[str, Any],
+        lang: Optional[str] = None,
+    ) -> str:
+        """Answers CFO & NS 4102 accounting questions in English or Norwegian based on SKILLS.md and live data."""
+        from app.accounting.chart_of_accounts import ENGLISH_ACCOUNTS_MAP, DEFAULT_ACCOUNTS
+
+        is_en = self._detect_english(question, lang)
         focused_sys = self._get_focused_system_prompt(["E"])
+        lang_instruction = (
+            "Use Skill E (Digital CFO). Answer clearly and accurately in ENGLISH using official English NS 4102 Norwegian GAAP account names and numbers."
+            if is_en
+            else "Bruk Ferdighet E (Digital CFO). Svar presist og strukturert på norsk med NS 4102-kontonumre."
+        )
         messages = [
             {"role": "system", "content": focused_sys},
             {
                 "role": "user",
                 "content": (
-                    "Bruk Ferdighet E (Digital CFO). Svar presist og strukturert på norsk.\n"
-                    f"Regnskapstall: Inntekter={accounting_summary.get('total_revenue', 0.0):,.2f} NOK, "
-                    f"Kostnader={accounting_summary.get('total_expenses', 0.0):,.2f} NOK, "
-                    f"Driftsresultat={accounting_summary.get('net_income', 0.0):,.2f} NOK, "
-                    f"Bankinnskudd (1920)={accounting_summary.get('bank_balance', 0.0):,.2f} NOK, "
-                    f"Bokførte bilag={accounting_summary.get('voucher_count', 0)} stk.\n\n"
-                    f"Spørsmål fra brukeren: {question}"
+                    f"{lang_instruction}\n"
+                    f"Figures: Revenue={accounting_summary.get('total_revenue', 0.0):,.2f} NOK, "
+                    f"Expenses={accounting_summary.get('total_expenses', 0.0):,.2f} NOK, "
+                    f"Net Income={accounting_summary.get('net_income', 0.0):,.2f} NOK, "
+                    f"Bank Balance (1920)={accounting_summary.get('bank_balance', 0.0):,.2f} NOK, "
+                    f"Vouchers={accounting_summary.get('voucher_count', 0)}.\n\n"
+                    f"User question: {question}"
                 ),
             },
         ]
-        reply = await self._call_llama(messages, temperature=0.2, max_tokens=300)
+        reply = await self._call_llama(messages, temperature=0.2, max_tokens=320)
         if reply:
             return reply
 
+        # Smart 24/7 rule-based bilingual NS 4102 CFO engine when local LLM is offline
+        ql = (question or "").lower()
         rev = accounting_summary.get("total_revenue", 0.0)
         net = accounting_summary.get("net_income", 0.0)
         bank = accounting_summary.get("bank_balance", 0.0)
         margin = round((net / rev) * 100, 1) if rev > 0 else 0.0
+
+        # 1) Direct lookup if user asks about a specific 4-digit NS 4102 account number
+        acc_nums = re.findall(r"\b([1-8]\d{3})\b", question or "")
+        if acc_nums:
+            num = int(acc_nums[0])
+            if num in ENGLISH_ACCOUNTS_MAP:
+                en_name, en_desc = ENGLISH_ACCOUNTS_MAP[num]
+                no_item = next((a for a in DEFAULT_ACCOUNTS if a["account_number"] == num), None)
+                no_name = no_item["name"] if no_item else en_name
+                no_desc = no_item["description"] if no_item else en_desc
+                if is_en:
+                    return (
+                        f"📘 **NS 4102 Account {num} — {en_name}**\n"
+                        f"• **Norwegian legal name:** {no_name}\n"
+                        f"• **Purpose / Legal basis:** {en_desc}\n"
+                        f"• **Type:** {no_item['account_type'] if no_item else 'ACCOUNT'} | **VAT code:** {no_item['vat_code'] if no_item else 'NONE'}\n"
+                        f"• **Double-entry rule:** Always ensure total Debit equals total Credit (e.g. against `1920 Operating Bank Account` or `2400 Accounts Payable`)."
+                    )
+                return (
+                    f"📘 **NS 4102 Konto {num} — {no_name}** (Engelsk: *{en_name}*)\n"
+                    f"• **Bruk:** {no_desc}\n"
+                    f"• **Type:** {no_item['account_type'] if no_item else 'KONTO'} | **MVA-kode:** {no_item['vat_code'] if no_item else 'NONE'}"
+                )
+
+        # 2) Debt collection / Inkasso / Late payment fees
+        if any(w in ql for w in ["debt collection", "collection fee", "inkasso", "purregebyr", "reminder fee", "late fee"]):
+            if is_en:
+                return (
+                    "⚖️ **Debt Collection & Reminder Fees (Norwegian GAAP / NS 4102):**\n"
+                    "• **Account `7775` — Debt Collection & Reminder Fees — Inkasso (0% VAT, Tax-Deductible):** Book collection fees and reminder fees on business invoices here (100% tax-deductible when the underlying claim relates to your business).\n"
+                    "• **Account `8150` — Interest Expenses & Late Payment Interest:** Book statutory late-payment interest charged by the collection agency here (0% VAT, tax-deductible).\n"
+                    "• **Double-entry example:** Debit `7775` (fee) + Debit `8150` (interest) / Credit `1920` Operating Bank Account (or `2400` Accounts Payable).\n"
+                    "• *Note:* Public fines/penalties (e.g. parking tickets) are NOT tax-deductible."
+                )
+            return (
+                "⚖️ **Inkasso og purregebyr (NS 4102):**\n"
+                "• **Konto `7775` — Inkassogebyr og purregebyr (Skattefradrag):** 0 % MVA, fullt skattemessig fradrag når kravet gjelder næringsvirksomheten.\n"
+                "• **Konto `8150` — Rentekostnader og forsinkelsesrenter:** Forsinkelsesrenter på inkassokravet (0 % MVA, skattefradrag).\n"
+                "• **Bokføring:** Debet `7775` (+ evt. Debet `8150`) / Kredit `1920` Bankinnskudd drift (eller `2400` Leverandørgjeld)."
+            )
+
+        # 3) Foreign expenses, reverse charge VAT, Meta/Google Ads, SaaS, travel abroad, imports
+        if any(w in ql for w in ["foreign", "abroad", "reverse charge", "meta", "google ads", "saas", "openai", "aws", "import", "utland", "snudd avregning"]):
+            if is_en:
+                return (
+                    "🌍 **Foreign Tax-Deductible Expenses & Reverse Charge VAT (Norway NS 4102):**\n"
+                    "• **`7325` — Foreign Advertising & Marketing (Meta/Google Ads):** 100% tax-deductible + 25% reverse-charge VAT (`2705` Output / `2715` Input).\n"
+                    "• **`6555` — Foreign Software, Cloud & SaaS (AWS, OpenAI, GitHub):** 100% tax-deductible + 25% reverse-charge VAT (`2705`/`2715`).\n"
+                    "• **`7145` — Foreign Business Travel & Hotel:** 0% Norwegian VAT deduction, 100% of total receipt is tax-deductible.\n"
+                    "• **`4310` — Purchases of Goods — Foreign Import:** Tax-deductible goods import.\n"
+                    "• **`4510` — Foreign Subcontractors & Services:** Tax-deductible foreign consulting + reverse-charge VAT."
+                )
+            return (
+                "🌍 **Utenlandske skattefradrag & snudd avregning (NS 4102):**\n"
+                "• **`7325`** Annonsering utland (Meta/Google Ads) + snudd avregning MVA (`2705`/`2715`).\n"
+                "• **`6555`** Programvare/SaaS utland (AWS, OpenAI, GitHub) + snudd avregning (`2705`/`2715`).\n"
+                "• **`7145`** Reise & hotell i utlandet (0 % norsk MVA, 100 % skattefradrag på hele beløpet).\n"
+                "• **`4310`** Vareimport utland · **`4510`** Tjenester/konsulent fra utlandet."
+            )
+
+        # 4) VAT / MVA questions
+        if any(w in ql for w in ["vat", "mva", "merverdiavgift", "value added tax"]):
+            if is_en:
+                return (
+                    "🧾 **Norwegian VAT (MVA) Rules — NS 4102:**\n"
+                    "• **25% Standard Rate:** Output `2700` / Input `2710` (goods & services)\n"
+                    "• **15% Food & Beverages:** Output `2701` / Input `2711`\n"
+                    "• **12% Transport, Hotels & Culture:** Output `2702` / Input `2712`\n"
+                    "• **25% Reverse Charge (Foreign Services):** Output `2705` / Input `2715`\n"
+                    "• **Settlement Account:** `2740 VAT Settlement Account` — submitted manually via **Altinn 3** (nothing is ever auto-submitted)."
+                )
+            return (
+                "🧾 **Norske MVA-satser (NS 4102):**\n"
+                "• **25 %:** `2700` Utgående / `2710` Inngående\n"
+                "• **15 % (mat):** `2701` / `2711` · **12 % (reise/hotell):** `2702` / `2712`\n"
+                "• **Snudd avregning utland (25 %):** `2705` / `2715` · **Oppgjør:** `2740`."
+            )
+
+        # 5) Payroll / Salary / Restricted tax account
+        if any(w in ql for w in ["payroll", "salary", "salaries", "wages", "holiday pay", "withholding", "aga", "lønn", "feriepenger", "skattetrekk"]):
+            if is_en:
+                return (
+                    "💼 **Norwegian Payroll & Statutory Withholding (NS 4102):**\n"
+                    "• **`5000` Salaries and Wages**, **`5180` Holiday Pay Expense (12%)**, **`5400` Employer's National Insurance (AGA, Zones 1–5)**, **`5420` Mandatory Pension (OTP)**.\n"
+                    "• **Statutory Tax Account (`1950` Restricted Tax Withholding Bank Account):** Per the Norwegian Tax Payment Act § 5-12, employee PAYE withholding tax (`2600`) MUST be transferred from `1920 Operating Bank Account` to `1950` on every payroll run. Phink Accounting posts this second voucher automatically!"
+                )
+            return (
+                "💼 **Norsk lønnskjøring (NS 4102):**\n"
+                "• Fordeles automatisk på `5000` Lønn, `5180` Feriepenger (12 %), `5400` AGA (sone 1–5), `5420` OTP, `2600` Forskuddstrekk og `2930` Skyldig lønn.\n"
+                "• Overfører automatisk forskuddstrekk fra `1920` til bundet skattetrekkskonto `1950` (Skattebetalingsloven § 5-12)."
+            )
+
+        # 6) Opening balance / SAF-T / General financial summary
+        if is_en:
+            status_word = "positive and healthy" if net >= 0 else "negative for the period"
+            return (
+                f"Here is a real-time CFO summary of your company's financial position (NS 4102):\n\n"
+                f"• **Liquidity Reserve (`1920` Operating Bank Account):** {bank:,.2f} NOK\n"
+                f"• **Operating Profit / Net Income:** {net:,.2f} NOK ({status_word}, operating margin {margin}%)\n"
+                f"• **Posted Vouchers:** {accounting_summary.get('voucher_count', 0)}\n\n"
+                f"💡 **CFO Advice:** Keep employee PAYE tax segregated on `1950 Restricted Tax Withholding Bank Account`, "
+                f"book foreign SaaS/ads under `6555`/`7325`, and debt collection fees under `7775` for full tax deduction under Norwegian law."
+            )
+
         status_word = "positivt og solid" if net >= 0 else "i minus for perioden"
         return (
             f"Her er en sanntidsanalyse av selskapets økonomiske stilling:\n\n"
@@ -240,7 +370,7 @@ class LlamaService:
             f"• **Driftsresultat:** {net:,.2f} NOK ({status_word}, driftsmargin {margin}%)\n"
             f"• **Bokførte bilag:** {accounting_summary.get('voucher_count', 0)} stk.\n\n"
             f"💡 **CFO-Råd:** Hold alltid ansattes forskuddstrekk adskilt på sperret Skattetrekkskonto (1950), "
-            f"og tagg prosjektkostnader (konto 4000–4500) med prosjektkode så prosjektregnskapet holdes ryddig."
+            f"og bruk `7775` (inkasso), `6555` (SaaS utland) og `7325` (annonser utland) for riktig skattefradrag."
         )
 
     def _fallback_invoice_parser(self, text: str) -> Dict[str, Any]:
@@ -268,36 +398,36 @@ class LlamaService:
             proj_code = proj_match.group(1).upper().replace(" ", "-")
             proj_name = f"Prosjekt {proj_code}"
 
-        if any(w in text_lower for w in ["inkasso", "purregebyr", "inkassogebyr", "inkassovarsel", "kredinor", "intrum", "lindorff", "sergel", "kravia", "inndrivelse"]):
-            account, account_name = 7775, "Inkassogebyr og purregebyr (Skattefradrag)"
+        if any(w in text_lower for w in ["inkasso", "purregebyr", "inkassogebyr", "inkassovarsel", "kredinor", "intrum", "lindorff", "sergel", "kravia", "inndrivelse", "debt collection", "collection fee", "reminder fee", "late fee"]):
+            account, account_name = 7775, "Debt Collection & Reminder Fees — Inkasso (0% VAT, Tax-Deductible)"
             vat_rate = 0
-            dept_code, dept_name = "ADM", "Administrasjon"
-            explanation = "Inkassogebyr/purregebyr på næringsrelaterte regninger føres på 7775 (0 % MVA, fullt skattemessig fradrag; eventuelle forsinkelsesrenter på 8150)."
-        elif any(w in text_lower for w in ["meta ireland", "meta platforms ireland", "facebook ads", "instagram ads", "google ads ireland", "google ireland"]):
-            account, account_name = 7325, "Annonsering & markedsføring i utlandet (Meta/Google Ads, skattefradrag)"
+            dept_code, dept_name = "ADM", "Administration"
+            explanation = "Debt collection / reminder fee on business claim booked to 7775 (0% VAT, 100% tax-deductible; statutory late-payment interest to 8150)."
+        elif any(w in text_lower for w in ["meta ireland", "meta platforms ireland", "facebook ads", "instagram ads", "google ads ireland", "google ireland", "foreign ads"]):
+            account, account_name = 7325, "Foreign Advertising & Marketing — Meta/Google Ads (Tax-Deductible)"
             vat_rate = 0
-            dept_code, dept_name = "SALG", "Salg og Marked"
-            explanation = "Annonsering i utlandet (Meta/Google Ireland) føres på 7325 med fullt skattefradrag og snudd avregning MVA (2715/2705)."
-        elif any(w in text_lower for w in ["openai", "amazon web services", "aws", "github", "cloudflare", "google cloud emea", "vercel", "digitalocean"]):
-            account, account_name = 6555, "Programvare, skytjenester & SaaS fra utlandet (Skattefradrag)"
+            dept_code, dept_name = "SALG", "Sales & Marketing"
+            explanation = "Foreign advertising (Meta/Google Ireland) booked to 7325 with full tax deduction and 25% reverse-charge VAT (2705/2715)."
+        elif any(w in text_lower for w in ["openai", "amazon web services", "aws", "github", "cloudflare", "google cloud emea", "vercel", "digitalocean", "foreign saas"]):
+            account, account_name = 6555, "Foreign Software, Cloud & SaaS (Tax-Deductible / Reverse Charge)"
             vat_rate = 0
-            dept_code, dept_name = "IT", "IT og Utvikling"
-            explanation = "Utenlandsk SaaS/skytjeneste føres på 6555 med fullt skattefradrag og snudd avregning MVA (2715/2705)."
-        elif any(w in text_lower for w in ["import fra utlandet", "vareimport", "toll", "utland import"]):
-            account, account_name = 4310, "Innkjøp av varer fra utlandet (Import, skattefradrag)"
+            dept_code, dept_name = "IT", "IT & Development"
+            explanation = "Foreign SaaS/cloud subscription booked to 6555 with full tax deduction and 25% reverse-charge VAT (2705/2715)."
+        elif any(w in text_lower for w in ["import fra utlandet", "vareimport", "toll", "utland import", "foreign import", "goods import", "customs import"]):
+            account, account_name = 4310, "Purchases of Goods — Foreign Import (Tax-Deductible)"
             vat_rate = 0
-            dept_code, dept_name = "DRIFT", "Drift og Produksjon"
-            explanation = "Vareimport fra utlandet føres på 4310 med fullt skattefradrag."
-        elif any(w in text_lower for w in ["konsulent utland", "tjenester fra utlandet", "foreign consulting"]):
-            account, account_name = 4510, "Kjøp av tjenester fra utlandet (Skattefradrag / snudd avregning)"
+            dept_code, dept_name = "DRIFT", "Operations"
+            explanation = "Foreign goods import booked to 4310 with full tax deduction."
+        elif any(w in text_lower for w in ["konsulent utland", "tjenester fra utlandet", "foreign consulting", "foreign services", "foreign subcontractor"]):
+            account, account_name = 4510, "Foreign Subcontractors & Services (Tax-Deductible / Reverse Charge)"
             vat_rate = 0
-            dept_code, dept_name = "DRIFT", "Drift og Produksjon"
-            explanation = "Utenlandsk konsulenttjeneste føres på 4510 med skattefradrag og snudd avregning MVA (2715/2705)."
-        elif any(w in text_lower for w in ["hotell utland", "hotel madrid", "hotel spania", "hotel barcelona", "hotel london", "hotel berlin", "tjenestereise utland", "iva "]):
-            account, account_name = 7145, "Tjenestereise og hotell i utlandet (Skattefradrag, 0% norsk MVA)"
+            dept_code, dept_name = "DRIFT", "Operations"
+            explanation = "Foreign consulting/service booked to 4510 with full tax deduction and 25% reverse-charge VAT (2705/2715)."
+        elif any(w in text_lower for w in ["hotell utland", "hotel madrid", "hotel spania", "hotel barcelona", "hotel london", "hotel berlin", "tjenestereise utland", "foreign hotel", "foreign travel", "business travel abroad", "iva "]):
+            account, account_name = 7145, "Foreign Business Travel & Hotel (0% NO VAT, 100% Tax-Deductible)"
             vat_rate = 0
-            dept_code, dept_name = "SALG", "Salg og Marked"
-            explanation = "Reise/hotell i utlandet føres på 7145 (0% norsk MVA-fradrag, hele totalbeløpet trekkes av på skatten)."
+            dept_code, dept_name = "SALG", "Sales & Marketing"
+            explanation = "Foreign business travel/hotel booked to 7145 (0% Norwegian VAT deduction; 100% of total receipt is tax-deductible)."
         elif any(w in text_lower for w in ["underentreprenør", "innleid", "fremmedytelse", "elektriker", "rørlegger", "konsulent"]):
             account, account_name = 4500, "Fremmedytelser og underleverandører"
             dept_code, dept_name = "DRIFT", "Drift og Produksjon"

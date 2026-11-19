@@ -333,6 +333,7 @@ class AIInvoiceParseResponse(BaseModel):
 
 class AIChatRequest(BaseModel):
     message: str
+    lang: Optional[str] = None
 
 class AIChatResponse(BaseModel):
     reply: str

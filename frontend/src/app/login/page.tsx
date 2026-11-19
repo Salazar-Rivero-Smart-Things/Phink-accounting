@@ -4,10 +4,12 @@ import React, { useEffect, useState } from "react";
 import Link from "next/link";
 import { Lock, Mail, ShieldCheck, ArrowRight, KeyRound, CheckCircle } from "lucide-react";
 import LogoSplash from "@/components/LogoSplash";
+import { LanguageToggle, useLanguage } from "@/lib/i18n";
 
 const API_BASE = process.env.NEXT_PUBLIC_API_URL || "/api";
 
 export default function LoginPage() {
+  const { t } = useLanguage();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [busy, setBusy] = useState(false);
@@ -118,18 +120,19 @@ export default function LoginPage() {
           </div>
           <div>
             <div className="font-bold text-white leading-tight">Phink Accounting</div>
-            <div className="text-[11px] text-slate-400">www.phink-acounting.no</div>
+            <div className="text-[11px] text-slate-400">www.phink-accounting.no</div>
           </div>
         </Link>
         <div className="flex items-center gap-3 text-xs">
+          <LanguageToggle compact />
           <Link href="/" className="text-slate-400 hover:text-white">
-            Tilbake til forsiden
+            {t("Tilbake til forsiden", "Back to home")}
           </Link>
           <Link
             href="/register"
             className="rounded-lg border border-amber-500/40 bg-amber-500/10 px-3.5 py-2 font-semibold text-amber-300 hover:bg-amber-500/20"
           >
-            Ny kunde? Registrer deg
+            {t("Ny kunde? Registrer deg", "New customer? Sign up")}
           </Link>
         </div>
       </header>

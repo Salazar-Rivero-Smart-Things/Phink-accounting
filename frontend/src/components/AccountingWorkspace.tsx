@@ -51,6 +51,7 @@ import BillingPanel from "@/components/BillingPanel";
 import ProfileModal from "@/components/ProfileModal";
 import OpeningBalanceModal from "@/components/OpeningBalanceModal";
 import LogoSplash from "@/components/LogoSplash";
+import { LanguageToggle, useLanguage } from "@/lib/i18n";
 
 const API_BASE = process.env.NEXT_PUBLIC_API_URL || "/api";
 
@@ -264,6 +265,7 @@ type TabType =
   | "settings";
 
 export default function AccountingWorkspace() {
+  const { lang, t } = useLanguage();
   const [activeTab, setActiveTab] = useState<TabType>("overview");
   const [currentUser, setCurrentUser] = useState<AuthUser | null>(null);
   const [authChecked, setAuthChecked] = useState(false);
@@ -422,7 +424,7 @@ export default function AccountingWorkspace() {
       ] = await Promise.all([
         fetch(`${API_BASE}/accounting/summary`).then(r => r.json()).catch(() => null),
         fetch(`${API_BASE}/accounting/vouchers`).then(r => r.json()).catch(() => []),
-        fetch(`${API_BASE}/accounting/accounts`).then(r => r.json()).catch(() => []),
+        fetch(`${API_BASE}/accounting/accounts?lang=${lang}`).then(r => r.json()).catch(() => []),
         fetch(`${API_BASE}/accounting/suppliers`).then(r => r.json()).catch(() => []),
         fetch(`${API_BASE}/accounting/supplier-invoices`).then(r => r.json()).catch(() => []),
         fetch(`${API_BASE}/accounting/customers`).then(r => r.json()).catch(() => []),
@@ -449,13 +451,12 @@ export default function AccountingWorkspace() {
       if (settRes && settRes.company_name) setCompanySettings(settRes);
       if (Array.isArray(tickRes)) {
         setTickets(tickRes);
-        if (tickRes.length > 0) {
-          setSelectedTicket((prev) => {
-            if (!prev) return tickRes[0];
-            const updated = tickRes.find((t: SupportTicket) => t.id === prev.id);
-            return updated || prev;
-          });
-        }
+        setSelectedTicket((prev) => {
+          if (tickRes.length === 0) return null;
+          if (!prev) return tickRes[0];
+          const updated = tickRes.find((t: SupportTicket) => t.id === prev.id);
+          return updated || tickRes[0];
+        });
       }
     } catch (e) {
       console.error("Feil ved datahenting:", e);
@@ -466,7 +467,7 @@ export default function AccountingWorkspace() {
     fetchAllData();
     const interval = setInterval(fetchAllData, 8000);
     return () => clearInterval(interval);
-  }, []);
+  }, [lang]);
 
   // --- ACTIONS ---
 
@@ -756,6 +757,50 @@ export default function AccountingWorkspace() {
     }
   };
 
+  // 9b. Spør kunden om problemet er løst (auto-lukkes når kunden svarer "ja")
+  const handleAskIfResolved = async () => {
+    if (!selectedTicket) return;
+    const ticketId = selectedTicket.id;
+    try {
+      const res = await fetch(`${API_BASE}/support/tickets/${ticketId}/reply`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          sender: "OPERATOR_YOU",
+          sender_name: currentUser?.full_name ? `${currentUser.full_name} (Kundeservice)` : "Deg (Kundeservice)",
+          message: "Er ditt problem løst nå? Svar «ja» dersom saken kan fullføres og avsluttes."
+        })
+      });
+      if (res.ok) {
+        const savedMsg: TicketMessage = await res.json();
+        setSelectedTicket((prev) =>
+          prev && prev.id === ticketId
+            ? { ...prev, messages: [...prev.messages, savedMsg] }
+            : prev
+        );
+        fetchAllData();
+      }
+    } catch {
+      alert("Kunne ikke sende spørsmålet.");
+    }
+  };
+
+  // 9c. Marker sak som fullført og fjern fra aktiv kø
+  const handleResolveTicket = async (ticketId: number) => {
+    try {
+      const res = await fetch(`${API_BASE}/support/tickets/${ticketId}/status?status=RESOLVED`, {
+        method: "POST"
+      });
+      if (res.ok) {
+        setTickets((prev) => prev.filter((t) => t.id !== ticketId));
+        setSelectedTicket((prev) => (prev?.id === ticketId ? null : prev));
+        fetchAllData();
+      }
+    } catch {
+      alert("Kunne ikke fullføre saken.");
+    }
+  };
+
   // 10. CFO Chat
   const handleCfoAsk = async () => {
     if (!cfoQuestion.trim() || cfoLoading) return;
@@ -768,7 +813,7 @@ export default function AccountingWorkspace() {
       const res = await fetch(`${API_BASE}/ai/chat`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ message: q })
+        body: JSON.stringify({ message: q, lang })
       });
       const data = await res.json();
       setCfoChatHistory(prev => [...prev, { sender: "cfo", text: data.reply }]);
@@ -886,7 +931,13 @@ export default function AccountingWorkspace() {
           </div>
 
           {/* Quick Action Button: + Før Regnskap */}
-          <div className="p-3">
+          <div className="p-3 space-y-2">
+            <div className="flex items-center justify-between px-1">
+              <span className="text-[10px] uppercase tracking-wider text-slate-400 font-semibold">
+                {t("Språk", "Language")}
+              </span>
+              <LanguageToggle compact />
+            </div>
             <button
               onClick={() => {
                 setActiveTab("record");
@@ -894,12 +945,12 @@ export default function AccountingWorkspace() {
               className="w-full py-2.5 px-3 bg-gradient-to-r from-blue-600 to-blue-500 hover:from-blue-500 hover:to-blue-400 text-white font-medium text-sm rounded-lg shadow-sm flex items-center justify-center space-x-2 transition-all cursor-pointer"
             >
               <PlusCircle className="w-4 h-4" />
-              <span>+ Før regnskap</span>
+              <span>{t("+ Før regnskap", "+ Book Voucher")}</span>
             </button>
           </div>
 
           {/* Navigasjonselementer */}
-          <nav className="px-2 space-y-0.5 text-sm overflow-y-auto max-h-[calc(100vh-250px)]">
+          <nav className="px-2 space-y-0.5 text-sm overflow-y-auto max-h-[calc(100vh-285px)]">
             <button
               onClick={() => setActiveTab("overview")}
               className={`w-full flex items-center space-x-3 px-3 py-2 rounded-lg font-medium transition-colors ${
@@ -909,7 +960,7 @@ export default function AccountingWorkspace() {
               }`}
             >
               <TrendingUp className="w-4 h-4" />
-              <span>Oversikt</span>
+              <span>{t("Oversikt", "Overview")}</span>
             </button>
 
             <button
@@ -922,7 +973,7 @@ export default function AccountingWorkspace() {
             >
               <div className="flex items-center space-x-3">
                 <Bell className="w-4 h-4 text-amber-400" />
-                <span>Varslinger</span>
+                <span>{t("Varslinger", "Notifications")}</span>
               </div>
               {notificationCount > 0 && (
                 <span className="px-2 py-0.5 text-[10px] font-bold rounded-full bg-red-500 text-white">
@@ -941,7 +992,7 @@ export default function AccountingWorkspace() {
             >
               <div className="flex items-center space-x-3">
                 <FolderCheck className="w-4 h-4" />
-                <span>Bilagsmottak</span>
+                <span>{t("Bilagsmottak", "Document Inbox")}</span>
               </div>
               {documents.length > 0 && (
                 <span className="bg-blue-500/20 text-blue-300 text-xs px-2 py-0.5 rounded-full font-semibold">
@@ -959,7 +1010,7 @@ export default function AccountingWorkspace() {
               }`}
             >
               <FileText className="w-4 h-4" />
-              <span>Bilagsliste & Journal</span>
+              <span>{t("Bilagsliste & Journal", "Vouchers & Journal")}</span>
             </button>
 
             <button
@@ -972,7 +1023,7 @@ export default function AccountingWorkspace() {
             >
               <div className="flex items-center space-x-3">
                 <Landmark className="w-4 h-4" />
-                <span>Bank & Avstemning</span>
+                <span>{t("Bank & Avstemning", "Bank & Reconciliation")}</span>
               </div>
               {summary.pending_reconciliations && summary.pending_reconciliations > 0 ? (
                 <span className="bg-amber-500/20 text-amber-300 text-xs px-2 py-0.5 rounded-full font-semibold">
@@ -982,7 +1033,7 @@ export default function AccountingWorkspace() {
             </button>
 
             <div className="pt-3 pb-1 px-3 text-[11px] font-semibold tracking-wider text-slate-400 uppercase">
-              Salg & Kjøp
+              {t("Salg & Kjøp", "Sales & Purchases")}
             </div>
 
             <button
@@ -994,7 +1045,7 @@ export default function AccountingWorkspace() {
               }`}
             >
               <Receipt className="w-4 h-4" />
-              <span>Faktura & Kunder</span>
+              <span>{t("Faktura & Kunder", "Invoices & Customers")}</span>
             </button>
 
             <button
@@ -1006,7 +1057,7 @@ export default function AccountingWorkspace() {
               }`}
             >
               <Building2 className="w-4 h-4" />
-              <span>Leverandører & Kjøp</span>
+              <span>{t("Leverandører & Kjøp", "Suppliers & Bills")}</span>
             </button>
 
             <button
@@ -1018,7 +1069,7 @@ export default function AccountingWorkspace() {
               }`}
             >
               <Users className="w-4 h-4 text-sky-400" />
-              <span>Lønnskjøring (Auto)</span>
+              <span>{t("Lønnskjøring (Auto)", "Payroll (Auto)")}</span>
             </button>
 
             <button
@@ -1030,7 +1081,7 @@ export default function AccountingWorkspace() {
               }`}
             >
               <FolderCheck className="w-4 h-4 text-amber-400" />
-              <span>Bilagsarkiv</span>
+              <span>{t("Bilagsarkiv", "Voucher Archive")}</span>
             </button>
 
             <button
@@ -1042,11 +1093,11 @@ export default function AccountingWorkspace() {
               }`}
             >
               <CreditCard className="w-4 h-4 text-orange-400" />
-              <span>Vipps &amp; Faktura</span>
+              <span>{t("Vipps & Faktura", "Vipps & Invoice Billing")}</span>
             </button>
 
             <div className="pt-3 pb-1 px-3 text-[11px] font-semibold tracking-wider text-slate-400 uppercase">
-              Myndigheter & Rapporter
+              {t("Myndigheter & Rapporter", "Tax Authorities & Reports")}
             </div>
 
             <button
@@ -1058,7 +1109,7 @@ export default function AccountingWorkspace() {
               }`}
             >
               <ShieldCheck className="w-4 h-4" />
-              <span>MVA-melding</span>
+              <span>{t("MVA-melding", "VAT Return (MVA)")}</span>
             </button>
 
             <button
@@ -1070,7 +1121,7 @@ export default function AccountingWorkspace() {
               }`}
             >
               <Download className="w-4 h-4 text-emerald-400" />
-              <span>SAF-T XML (Eksport/Import)</span>
+              <span>{t("SAF-T XML (Eksport/Import)", "SAF-T XML (Export/Import)")}</span>
             </button>
 
             <button
@@ -1082,7 +1133,7 @@ export default function AccountingWorkspace() {
               }`}
             >
               <FileCheck className="w-4 h-4 text-violet-400" />
-              <span>Regnskapsfaglig kontroll</span>
+              <span>{t("Regnskapsfaglig kontroll", "Statutory Compliance Check")}</span>
             </button>
 
             <button
@@ -1094,7 +1145,7 @@ export default function AccountingWorkspace() {
               }`}
             >
               <Landmark className="w-4 h-4 text-emerald-400" />
-              <span>Altinn & Brreg</span>
+              <span>{t("Altinn & Brreg", "Altinn & Brreg Filing")}</span>
             </button>
 
             <button
@@ -1106,7 +1157,7 @@ export default function AccountingWorkspace() {
               }`}
             >
               <FileSpreadsheet className="w-4 h-4" />
-              <span>Resultat & Balanse</span>
+              <span>{t("Resultat & Balanse", "P&L & Balance Sheet")}</span>
             </button>
 
             <button
@@ -1118,11 +1169,11 @@ export default function AccountingWorkspace() {
               }`}
             >
               <CreditCard className="w-4 h-4" />
-              <span>Kontoplan (NS 4102)</span>
+              <span>{t("Kontoplan (NS 4102)", "Chart of Accounts (NS 4102)")}</span>
             </button>
 
             <div className="pt-3 pb-1 px-3 text-[11px] font-semibold tracking-wider text-slate-400 uppercase">
-              Assistanse & Support
+              {t("Assistanse & Support", "AI & Support")}
             </div>
 
             <button
@@ -1134,7 +1185,7 @@ export default function AccountingWorkspace() {
               }`}
             >
               <Sparkles className="w-4 h-4 text-purple-400" />
-              <span>AI CFO Rådgiver</span>
+              <span>{t("AI CFO Rådgiver", "AI CFO Advisor")}</span>
             </button>
 
             <button
@@ -1147,7 +1198,7 @@ export default function AccountingWorkspace() {
             >
               <div className="flex items-center space-x-3">
                 <Headphones className="w-4 h-4 text-emerald-400" />
-                <span>Kundeservice Desk</span>
+                <span>{t("Kundeservice Desk", "Live Support Desk")}</span>
               </div>
               <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span>
             </button>
@@ -2826,8 +2877,23 @@ export default function AccountingWorkspace() {
                           Fra: {selectedTicket.customer_name} ({selectedTicket.customer_email})
                         </p>
                       </div>
-                      <div className="text-xs bg-blue-100 text-blue-800 px-2.5 py-1 rounded-full font-semibold">
-                        Ansvarlig operatør: Deg
+                      <div className="flex flex-wrap items-center gap-2">
+                        <button
+                          type="button"
+                          onClick={handleAskIfResolved}
+                          className="px-2.5 py-1.5 bg-amber-100 hover:bg-amber-200 text-amber-900 rounded-lg text-[11px] font-semibold cursor-pointer"
+                          title="Når kunden svarer «ja», fullføres og fjernes saken automatisk!"
+                        >
+                          Spør: Er ditt problem løst nå?
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => handleResolveTicket(selectedTicket.id)}
+                          className="px-2.5 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-[11px] font-semibold cursor-pointer flex items-center gap-1"
+                        >
+                          <Check className="w-3.5 h-3.5" />
+                          <span>Fullfør &amp; fjern</span>
+                        </button>
                       </div>
                     </div>
 

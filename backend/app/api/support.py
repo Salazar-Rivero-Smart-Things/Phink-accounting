@@ -13,9 +13,15 @@ from app.schemas.accounting import (
 router = APIRouter(prefix="/support", tags=["Kundeservice"])
 
 @router.get("/tickets", response_model=List[SupportTicketResponse])
-def get_support_tickets(db: Session = Depends(get_db)):
-    """Henter alle kundeservicehenvendelser for operatørdashbordet."""
-    return db.query(SupportTicket).order_by(SupportTicket.updated_at.desc()).all()
+def get_support_tickets(include_resolved: bool = False, db: Session = Depends(get_db)):
+    """
+    Henter aktive kundeservicehenvendelser for operatørdashbordet.
+    Fullførte saker (status='RESOLVED') fjernes automatisk fra den aktive listen.
+    """
+    q = db.query(SupportTicket)
+    if not include_resolved:
+        q = q.filter(SupportTicket.status != "RESOLVED")
+    return q.order_by(SupportTicket.updated_at.desc()).all()
 
 @router.post("/tickets", response_model=SupportTicketResponse)
 def create_support_ticket(ticket_in: SupportTicketCreate, db: Session = Depends(get_db)):
@@ -82,13 +88,49 @@ def create_support_ticket(ticket_in: SupportTicketCreate, db: Session = Depends(
     db.refresh(db_ticket)
     return db_ticket
 
+def _is_resolution_question(text: str) -> bool:
+    t = (text or "").strip().lower()
+    return any(
+        phrase in t
+        for phrase in [
+            "er ditt problem løst nå",
+            "er problemet ditt løst",
+            "er problemet løst",
+            "problem løst nå",
+            "saken løst nå",
+        ]
+    )
+
+
+def _is_affirmative_yes(text: str) -> bool:
+    cleaned = (text or "").strip().lower().strip(".,!? ")
+    if not cleaned:
+        return False
+    yes_exact = {"ja", "ja takk", "jepp", "jep", "yes", "ok ja", "ja det er løst", "ja, det er løst", "ja det er det", "ja nå er det løst", "ja, nå er det løst"}
+    if cleaned in yes_exact:
+        return True
+    return cleaned.startswith("ja ") or cleaned.startswith("ja,") or cleaned.startswith("ja!")
+
+
 @router.post("/tickets/{ticket_id}/reply", response_model=TicketMessageResponse)
 @router.post("/tickets/{ticket_id}/messages", response_model=TicketMessageResponse)
 def reply_to_ticket(ticket_id: int, reply_in: TicketMessageCreate, db: Session = Depends(get_db)):
-    """Du (operatør) eller kunden sender et svar i saken."""
+    """
+    Du (operatør) eller kunden sender et svar i saken.
+    AUTO-FULLFØRING: Dersom operatør/AI nettopp spurte «Er ditt problem løst nå?»
+    og kunden svarer «ja», markeres saken automatisk som RESOLVED og fjernes fra aktiv kø.
+    """
     ticket = db.query(SupportTicket).filter(SupportTicket.id == ticket_id).first()
     if not ticket:
         raise HTTPException(status_code=404, detail="Kundeservicesak ikke funnet.")
+
+    # Sjekk siste melding fra operatør/AI før vi legger til den nye meldingen
+    last_staff_msg = (
+        db.query(TicketMessage)
+        .filter(TicketMessage.ticket_id == ticket.id, TicketMessage.sender != "CUSTOMER")
+        .order_by(TicketMessage.id.desc())
+        .first()
+    )
 
     # Oppdater status til aktiv operatør
     if reply_in.sender == "OPERATOR_YOU":
@@ -102,9 +144,50 @@ def reply_to_ticket(ticket_id: int, reply_in: TicketMessageCreate, db: Session =
         message=reply_in.message
     )
     db.add(msg)
+
+    # Hvis kunden svarer "ja" på "Er ditt problem løst nå?", avslutt og fjern fra aktiv kø automatisk!
+    if (
+        reply_in.sender == "CUSTOMER"
+        and last_staff_msg is not None
+        and _is_resolution_question(last_staff_msg.message)
+        and _is_affirmative_yes(reply_in.message)
+    ):
+        ticket.status = "RESOLVED"
+        ticket.updated_at = datetime.utcnow()
+        db.add(TicketMessage(
+            ticket_id=ticket.id,
+            sender="SYSTEM",
+            sender_name="Phink Kundeservice",
+            message="Takk for bekreftelsen! Saken er nå fullført og automatisk fjernet fra aktiv kundeservicekø.",
+        ))
+        db.add(AuditLog(
+            action="SUPPORT_TICKET_AUTO_RESOLVED",
+            details=f"Sak #{ticket.id} ({ticket.subject}) ble automatisk fullført og fjernet etter kundens «ja»-bekreftelse.",
+            ai_assisted=False,
+        ))
+
     db.commit()
     db.refresh(msg)
     return msg
+
+
+@router.post("/tickets/resolve-all")
+def resolve_all_tickets(db: Session = Depends(get_db)):
+    """Markerer alle åpne kundeservicesaker som RESOLVED slik at aktiv kø tømmes."""
+    open_tickets = db.query(SupportTicket).filter(SupportTicket.status != "RESOLVED").all()
+    count = len(open_tickets)
+    now = datetime.utcnow()
+    for t in open_tickets:
+        t.status = "RESOLVED"
+        t.updated_at = now
+    if count > 0:
+        db.add(AuditLog(
+            action="SUPPORT_TICKETS_RESOLVED_ALL",
+            details=f"{count} kundeservicesaker ble markert som fullført (RESOLVED) og fjernet fra aktiv kø.",
+            ai_assisted=False,
+        ))
+    db.commit()
+    return {"ok": True, "resolved_count": count, "message": f"{count} samtale(r) ble fullført og fjernet fra aktiv kø."}
 
 @router.post("/tickets/{ticket_id}/status")
 def update_ticket_status(ticket_id: int, status: str, db: Session = Depends(get_db)):
