@@ -75,6 +75,11 @@ app.include_router(billing_router, prefix=settings.API_V1_STR)
 app.include_router(ai_router, prefix=settings.API_V1_STR)
 app.include_router(support_router, prefix=settings.API_V1_STR)
 
+@app.get("/health")
+def health():
+    return {"status": "ok", "service": settings.PROJECT_NAME, "version": settings.VERSION}
+
+
 @app.get("/")
 def root():
     return {

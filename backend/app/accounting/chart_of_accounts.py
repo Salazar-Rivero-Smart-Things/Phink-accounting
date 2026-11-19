@@ -112,13 +112,14 @@ DEFAULT_ACCOUNTS = [
     {"account_number": 7360, "name": "Representasjon, ikke fradragsberettiget", "account_type": "EXPENSE", "vat_code": "NONE", "description": "Ikke-fradragsberettiget bevertning"},
     {"account_number": 7400, "name": "Kontingenter og medlemskap", "account_type": "EXPENSE", "vat_code": "NONE", "description": "Bransje- og arbeidsgiverforeninger"},
     {"account_number": 7500, "name": "Forsikringspremie", "account_type": "EXPENSE", "vat_code": "NONE", "description": "Bedrifts-, ansvars- og innboforsikring (0% MVA)"},
-    {"account_number": 7770, "name": "Bank- og kortgebyrer", "account_type": "EXPENSE", "vat_code": "NONE", "description": "Transaksjonsgebyrer bank, Vipps og Stripe"},
+    {"account_number": 7770, "name": "Bank- og kortgebyrer", "account_type": "EXPENSE", "vat_code": "NONE", "description": "Transaksjonsgebyrer bank og Vipps"},
+    {"account_number": 7775, "name": "Inkassogebyr og purregebyr (Skattefradrag)", "account_type": "EXPENSE", "vat_code": "NONE", "description": "Fradragsberettigede inkassogebyrer, purregebyrer og inndrivelseskostnader på næringsrelaterte regninger (0 % MVA, fullt skattefradrag)"},
     {"account_number": 7830, "name": "Konstatert tap på kundefordringer", "account_type": "EXPENSE", "vat_code": "NONE", "description": "Endelig tap på utestående krav"},
 
     # 8xxx: Finansposter og Skatt
     {"account_number": 8050, "name": "Renteinntekter", "account_type": "REVENUE", "vat_code": "NONE", "description": "Renter på bankinnskudd"},
     {"account_number": 8060, "name": "Valutagevinst (Agio)", "account_type": "REVENUE", "vat_code": "NONE", "description": "Gevinst ved valutakursendring"},
-    {"account_number": 8150, "name": "Rentekostnader", "account_type": "EXPENSE", "vat_code": "NONE", "description": "Lånerenter og forsinkelsesrenter"},
+    {"account_number": 8150, "name": "Rentekostnader og forsinkelsesrenter (inkl. inkasso)", "account_type": "EXPENSE", "vat_code": "NONE", "description": "Lånerenter og forsinkelsesrenter på næringsgjeld / inkasso (skattefradrag)"},
     {"account_number": 8160, "name": "Valutatap (Disagio)", "account_type": "EXPENSE", "vat_code": "NONE", "description": "Tap ved valutakursendring"},
     {"account_number": 8300, "name": "Betalbar skatt", "account_type": "EXPENSE", "vat_code": "NONE", "description": "Skattekostnad på resultat"}
 ]

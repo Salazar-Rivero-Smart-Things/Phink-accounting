@@ -268,7 +268,12 @@ class LlamaService:
             proj_code = proj_match.group(1).upper().replace(" ", "-")
             proj_name = f"Prosjekt {proj_code}"
 
-        if any(w in text_lower for w in ["meta ireland", "meta platforms ireland", "facebook ads", "instagram ads", "google ads ireland", "google ireland"]):
+        if any(w in text_lower for w in ["inkasso", "purregebyr", "inkassogebyr", "inkassovarsel", "kredinor", "intrum", "lindorff", "sergel", "kravia", "inndrivelse"]):
+            account, account_name = 7775, "Inkassogebyr og purregebyr (Skattefradrag)"
+            vat_rate = 0
+            dept_code, dept_name = "ADM", "Administrasjon"
+            explanation = "Inkassogebyr/purregebyr på næringsrelaterte regninger føres på 7775 (0 % MVA, fullt skattemessig fradrag; eventuelle forsinkelsesrenter på 8150)."
+        elif any(w in text_lower for w in ["meta ireland", "meta platforms ireland", "facebook ads", "instagram ads", "google ads ireland", "google ireland"]):
             account, account_name = 7325, "Annonsering & markedsføring i utlandet (Meta/Google Ads, skattefradrag)"
             vat_rate = 0
             dept_code, dept_name = "SALG", "Salg og Marked"
