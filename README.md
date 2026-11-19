@@ -1,63 +1,66 @@
-# Phink Accounting 📊🤖🎧
+# Phink Accounting &bull; Conta Edition 📊🧾🏦🎧
 
-Et moderne, helhetlig regnskapssystem bygget med **dobbel bokføring**, **Meta Llama 3.1 AI-assistanse**, og en **egen integrert Kundeservicedesk (Human-in-the-Loop)** for direkte håndtering av refusjoner, betalingsfeil og kundehenvendelser.
-
----
-
-## 🌟 Hovedfunksjoner
-
-1. **Dobbel bokføring & Norsk Standard Kontoplan (NS 4102):**
-   - Strikt matematisk validering: Et bilag kan aldri lagres med ubalanse (`sum(debet) == sum(kredit)`).
-   - Innebygde standardkontoer: Bank (1920), Leverandørgjeld (2400), Salg (3000), IT-drift (6540), Kontorrekvisita (6800) osv.
-
-2. **Kundeservice & Operatørdriver (Deg + Llama):**
-   - **1. linje Support (Llama 3.1):** AI-en tar imot henvendelser og analyserer saken.
-   - **Eskalering til operatør (Deg):** Ved økonomiske hendelser som *refusjonskrav* eller *betalingsfeil* eskaleres saken direkte til din personlige operatørstasjon i dashbordet.
-   - Hurtigknapper for refusjonsgodkjenning, avklaring av transaksjoner og direktechat med kunder.
-
-3. **AI Bilagsmottak & Skanning (Llama 3.1):**
-   - Analyserer fakturatekst og kvitteringer.
-   - Trekker ut leverandør, beløp, MVA, KID og forfallsdato.
-   - Genererer automatisk balanserte konteringsforslag i henhold til norsk regnskapsstandard.
-
-4. **Llama CFO Chat:**
-   - Still spørsmål i naturlig språk til din digitale økonomisjef basert på sanntidstall fra regnskapet (likviditet, driftsresultat, skatt og rådgivning).
-
-5. **Sikkerhet & Personvern (Defense in Depth):**
-   - **Lokal AI-inferens:** Regnskapstall sendes ikke til eksterne skyleverandører.
-   - **Kryptografisk revisjonsspor (Audit Trail):** Append-only logg som forhindrer sletting eller usynlig manipulasjon av historiske bilag.
-   - **AES-256 kryptering** for data i ro og **TLS 1.3** for data i transitt.
+Et komplett, moderne og helhetlig norsk regnskapssystem inspirert av **Conta Regnskap / Conta Faktura**, bygget med **dobbel bokføring (NS 4102)**, **ekte bankavstemning**, **bilde- og PDF-bilagsmottak**, **Llama 3.1 AI-assistanse**, og en **integrert Kundeservicedesk (Human-in-the-Loop)** der du som operatør er til stede for kundene i sanntid.
 
 ---
 
-## 🏗️ Teknologier
+## 🌟 Hovedmoduler i programmet (Conta-klone)
 
-* **Backend:** Python 3 (FastAPI, SQLAlchemy, Pydantic v2, PyPDF, Uvicorn)
-* **Frontend:** Next.js (TypeScript, React 19, Tailwind CSS 4, Lucide Icons)
-* **AI Engine:** Meta Llama 3.1 8B (koblet via lokal Ollama eller intern tolk)
-* **Database:** SQLite / PostgreSQL
+### 1. 🏦 Bank & Bankavstemning (Conta Bank)
+* **Import av kontoutskrifter:** Støtte for transaksjonslister direkte fra nettbanken.
+* **Automatisk matching:** Smart motor som matcher banktransaksjoner mot bokførte poster på konto 1920 (Bankinnskudd) basert på beløp, dato og referanse.
+* **Avstemmingsdifferanse i sanntid:** Viser tydelig om bank og regnskap er 100% i balanse (Differanse = 0,00 NOK).
+* **1-klikks hurtigbokføring:** Bokfør uavstemte poster som bankgebyr (7770) eller renteinntekt (8050) direkte med ett klikk.
+
+### 2. 📥 Bilagsmottak (Innboks for Bilde & PDF)
+* **Drag-and-drop opplasting:** Last opp kvitteringer og fakturaer som **både bilder (PNG, JPG, WEBP)** og **PDF-dokumenter**.
+* **Forhåndsvisning:** Se originalbilaget direkte i grensesnittet i en innebygd viewer/modal.
+* **AI-tolking (Meta Llama 3.1):** AI-en analyserer bilaget, trekker ut leverandør, beløp, MVA, KID og forfallsdato, og klargjør konteringslinjer.
+
+### 3. ✍️ Føre regnskap (Conta-stil Bokføringsveiviser)
+* **Kjøp / Utgift:** Enkel føring med valg av leverandør, MVA-sats (25%, 15%, 0%), kostnadskonto og betalingsmåte (bank eller leverandørgjeld).
+* **Salg / Inntekt:** Direkte kobling mot fakturering.
+* **Fritt bilag:** Fleksibel manuell debet/kredit med matematisk validering av balanse før bokføring.
+
+### 4. 🧾 Conta Faktura & Kunder
+* **Oppretting av salgsfaktura:** Vare- og tjenestelinjer, automatisk KID-generering og forfallsdato.
+* **Automatisk bokføring:** Bokføres direkte i hovedboken: Debet 1500 (Kundefordringer), Kredit 3000 (Salgsinntekt), Kredit 2700 (Utgående MVA 25%).
+* **Registrer innbetaling:** 1-klikks registrering av kundeoppgjør mot konto 1920.
+
+### 5. 🏢 Leverandører & Leverandørreskontro
+* **Leverandørregister:** Full oversikt over leverandører, org.nr, kontonummer og standard utgiftskonto.
+* **Inngående fakturaer:** Sporing av forfall og utestående leverandørgjeld (konto 2400).
+* **Betaling:** Utbetaling direkte fra driftskonto 1920.
+
+### 6. 🏛️ MVA-melding (Merverdiavgift)
+* **Termin 1–6:** Automatisk beregning av 2-månedlige terminer etter Skatteetatens standard.
+* **MVA-grunnlag:** Spesifikasjon av utgående MVA (konto 2700), inngående MVA-fradrag (konto 2710) og netto MVA å betale/til gode.
+
+### 7. 📈 Finansielle Rapporter & Hovedbok
+* **Resultatregnskap (P&L):** Driftsinntekter, driftskostnader og årsresultat før skatt.
+* **Balanserapport:** Eiendeler (bank, kundefordringer) vs Egenkapital og Gjeld.
+* **Bilagsjournal / Hovedbok:** Fullstendig søk- og filtrerbar logg over alle historiske bilag med debet/kredit og filvedlegg.
+
+### 8. 🎧 Kundeservice Desk & Operatørstasjon (Deg + AI)
+* **1. linje Support (Llama 3.1):** Tar imot kundehenvendelser automatisk.
+* **Eskalering til operatør (Deg):** Ved økonomiske hendelser eller spørsmål om bilag kan du snakke direkte med kundene i sanntid og godkjenne oppgjør eller gi bistand.
+
+### 9. 🤖 Phink AI CFO (Meta Llama 3.1)
+* Still strategiske spørsmål om bedriftens likviditet, skatt, kostnadskutt og nøkkeltall.
 
 ---
 
-## 🚀 Hvordan starte prosjektet
+## 🚀 Oppstart
 
-### 1. Start Python Backend (Port 8000)
-```powershell
-cd backend
-.\venv\Scripts\python -m uvicorn app.main:app --reload --port 8000
+Kjør oppstartsskriptet fra rotmappen:
+```cmd
+start-all.bat
 ```
-Swagger API-dokumentasjon er tilgjengelig på: `http://localhost:8000/docs`
-
-### 2. Start Next.js Frontend (Port 3000)
+Eller i PowerShell:
 ```powershell
-cd frontend
-npm run dev
+.\start.ps1
 ```
-Åpne nettleseren på: `http://localhost:3000`
 
----
-
-## ⚖️ Lisens & Attribusjon
-Dette prosjektet benytter Meta Llama 3.1 i henhold til lisensbetingelsene:
-*Llama 3.1 is licensed under the Llama 3.1 Community License, Copyright © Meta Platforms, Inc. All Rights Reserved.*
-Notice-fil er tilgjengelig i prosjektets rotmappe: `NOTICE`.
+* **Frontend Dashbord:** `http://localhost:3000`
+* **FastAPI Backend & API Docs:** `http://localhost:8000/docs`
+* **Opplastede bilag (Statisk servering):** `http://localhost:8000/uploads/`

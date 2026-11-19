@@ -1,0 +1,20 @@
+# Caddyfile for www.phink-acounting.no (alt kjøres lokalt på domeneserveren)
+# Frontend (Next.js): 127.0.0.1:3000
+# Backend (FastAPI + SQLite/PostgreSQL): 127.0.0.1:8000
+
+www.phink-acounting.no, phink-acounting.no {
+    encode gzip zstd
+
+    # API og opplastede bilag (PDF/bilder) går direkte til FastAPI lokalt
+    handle /api/* {
+        reverse_proxy 127.0.0.1:8000
+    }
+    handle /uploads/* {
+        reverse_proxy 127.0.0.1:8000
+    }
+
+    # Alt annet går til Next.js frontend
+    handle {
+        reverse_proxy 127.0.0.1:3000
+    }
+}

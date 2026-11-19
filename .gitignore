@@ -35,3 +35,6 @@ models/
 Thumbs.db
 .vscode/
 .idea/
+
+# Runtime user uploads
+backend/app/uploads/
