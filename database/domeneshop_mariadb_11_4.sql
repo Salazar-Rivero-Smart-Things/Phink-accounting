@@ -11,6 +11,7 @@
 --   3. Last opp denne filen og klikk "Utfør"
 -- =============================================================================
 
+USE `phinkaccountin01`;
 SET NAMES utf8mb4;
 SET FOREIGN_KEY_CHECKS = 0;
 

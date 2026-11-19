@@ -73,10 +73,12 @@ export default function ArchiveSaftCompliancePanel({
   apiBase,
   mode,
   onImported,
+  onOpenOpeningBalance,
 }: {
   apiBase: string;
   mode: "archive" | "saft" | "compliance";
   onImported?: () => void;
+  onOpenOpeningBalance?: () => void;
 }) {
   const [query, setQuery] = useState("");
   const [archive, setArchive] = useState<{ total_vouchers: number; with_attachments: number; items: ArchiveItem[] }>({
@@ -315,6 +317,27 @@ export default function ArchiveSaftCompliancePanel({
             </label>
           </div>
         </div>
+
+        {onOpenOpeningBalance && (
+          <div className="rounded-2xl border border-emerald-200 bg-emerald-50/70 p-5 flex flex-wrap items-center justify-between gap-4">
+            <div>
+              <h3 className="font-bold text-emerald-950 text-sm">
+                Manuell inngående balanse (Saldo på bankkonto i dag)
+              </h3>
+              <p className="text-xs text-emerald-800 mt-0.5">
+                Har du ikke en SAF-T fil, eller vil du legge inn nøyaktig saldo på driftskontoen (1920) i dag manuelt?
+                Klikk her for å importere inngående balanse med ett klikk.
+              </p>
+            </div>
+            <button
+              type="button"
+              onClick={onOpenOpeningBalance}
+              className="rounded-xl bg-emerald-600 hover:bg-emerald-700 px-4 py-2.5 text-xs font-bold text-white shadow-xs cursor-pointer"
+            >
+              + Importer saldo på konto i dag (Manuell balanse)
+            </button>
+          </div>
+        )}
 
         {error && (
           <div className="rounded-xl border border-red-200 bg-red-50 p-4 text-sm text-red-700">{error}</div>

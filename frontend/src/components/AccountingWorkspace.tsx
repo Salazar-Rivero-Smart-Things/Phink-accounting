@@ -49,6 +49,7 @@ import ArchiveSaftCompliancePanel from "@/components/ArchiveSaftCompliancePanel"
 import NotificationsPanel from "@/components/NotificationsPanel";
 import BillingPanel from "@/components/BillingPanel";
 import ProfileModal from "@/components/ProfileModal";
+import OpeningBalanceModal from "@/components/OpeningBalanceModal";
 import LogoSplash from "@/components/LogoSplash";
 
 const API_BASE = process.env.NEXT_PUBLIC_API_URL || "/api";
@@ -268,6 +269,7 @@ export default function AccountingWorkspace() {
   const [authChecked, setAuthChecked] = useState(false);
   const [showAuthModal, setShowAuthModal] = useState(false);
   const [showProfileModal, setShowProfileModal] = useState(false);
+  const [showOpeningBalanceModal, setShowOpeningBalanceModal] = useState(false);
   const [notificationCount, setNotificationCount] = useState(0);
 
   useEffect(() => {
@@ -1269,9 +1271,18 @@ export default function AccountingWorkspace() {
                   <div className="mt-2 text-2xl font-bold text-slate-900">
                     {summary.bank_balance.toLocaleString("nb-NO", { minimumFractionDigits: 2 })} NOK
                   </div>
-                  <div className="mt-1 text-xs text-emerald-600 flex items-center space-x-1">
-                    <CheckCircle className="w-3.5 h-3.5" />
-                    <span>Likviditetsreserve</span>
+                  <div className="mt-1 text-xs text-emerald-600 flex items-center justify-between gap-2">
+                    <span className="flex items-center space-x-1">
+                      <CheckCircle className="w-3.5 h-3.5" />
+                      <span>Likviditetsreserve</span>
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => setShowOpeningBalanceModal(true)}
+                      className="text-[11px] font-semibold text-emerald-700 hover:text-emerald-900 underline cursor-pointer"
+                    >
+                      + Sett saldo i dag
+                    </button>
                   </div>
                 </div>
 
@@ -1314,6 +1325,41 @@ export default function AccountingWorkspace() {
                   </div>
                 </div>
               </div>
+
+              {/* Kom i gang-banner når regnskapet er nullstilt til 0 */}
+              {vouchers.length === 0 && (
+                <div className="bg-gradient-to-r from-emerald-50 to-blue-50 border border-emerald-200 p-5 rounded-xl flex flex-wrap items-center justify-between gap-4">
+                  <div className="flex items-center space-x-3">
+                    <div className="p-2.5 bg-emerald-100 rounded-lg text-emerald-700">
+                      <Landmark className="w-5 h-5" />
+                    </div>
+                    <div>
+                      <h4 className="font-bold text-slate-900 text-sm">
+                        Regnskapet starter rent på 0 kr — klart for dine ekte tall!
+                      </h4>
+                      <p className="text-xs text-slate-600 mt-0.5">
+                        Importer din SAF-T XML-fil fra forrige regnskapsprogram, eller legg inn dagens saldo på bankkonto manuelt.
+                      </p>
+                    </div>
+                  </div>
+                  <div className="flex flex-wrap items-center gap-2">
+                    <button
+                      type="button"
+                      onClick={() => setShowOpeningBalanceModal(true)}
+                      className="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold rounded-lg shadow-xs transition-colors cursor-pointer"
+                    >
+                      + Importer saldo på konto i dag (Manuell balanse)
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setActiveTab("saft")}
+                      className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold rounded-lg shadow-xs transition-colors cursor-pointer"
+                    >
+                      Importer SAF-T XML
+                    </button>
+                  </div>
+                </div>
+              )}
 
               {/* Raske Handlinger & Bankavstemning Banner */}
               {summary.pending_reconciliations && summary.pending_reconciliations > 0 ? (
@@ -2022,6 +2068,14 @@ export default function AccountingWorkspace() {
                 </div>
                 <div className="flex items-center space-x-3">
                   <button
+                    type="button"
+                    onClick={() => setShowOpeningBalanceModal(true)}
+                    className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white font-semibold text-xs rounded-lg shadow-xs flex items-center space-x-1.5 transition-all cursor-pointer"
+                  >
+                    <Landmark className="w-3.5 h-3.5" />
+                    <span>+ Importer saldo på konto i dag</span>
+                  </button>
+                  <button
                     onClick={handleAutoReconcile}
                     className="px-4 py-2 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white font-semibold text-xs rounded-lg shadow-xs flex items-center space-x-1.5 transition-all cursor-pointer"
                   >
@@ -2486,7 +2540,42 @@ export default function AccountingWorkspace() {
                 )}
               </div>
 
-              {/* Seksjon 2: SAF-T Regnskapseksport */}
+              {/* Seksjon 2: Send inn regnskap (Manuell knapp — ingenting sendes automatisk!) */}
+              <div className="bg-white p-6 rounded-2xl border border-emerald-200 shadow-xs flex flex-wrap items-center justify-between gap-4">
+                <div className="space-y-1">
+                  <h4 className="font-bold text-slate-900 text-sm flex items-center space-x-2">
+                    <Send className="w-4 h-4 text-emerald-600" />
+                    <span>Send inn regnskap til Altinn &amp; Brønnøysund (Årsregnskap / Skattemelding)</span>
+                  </h4>
+                  <p className="text-xs text-slate-500 max-w-xl">
+                    Ingenting sendes inn automatisk uten din godkjenning. Når regnskapet er kontrollert,
+                    klikk knappen for å sende inn årsregnskap (RR-0002) og næringsspesifikasjon via Altinn 3.
+                  </p>
+                </div>
+                <button
+                  onClick={async () => {
+                    if (!window.confirm("Sende inn årsregnskap og næringsspesifikasjon (2026) til Altinn / Brønnøysund nå?")) return;
+                    try {
+                      const res = await fetch(`${API_BASE}/accounting/altinn/submit-annual-accounts?fiscal_year=2026`, {
+                        method: "POST",
+                      });
+                      const data = await res.json();
+                      if (!res.ok) throw new Error(data.detail || "Innsending feilet.");
+                      alert(
+                        `${data.message}\n\nInnsendings-ID: ${data.submission_id}\nArkivreferanse: ${data.altinn_archive_reference}\nDriftsinntekter: ${data.figures.driftsinntekter.toLocaleString("nb-NO")} kr\nÅrsresultat: ${data.figures.aarsresultat.toLocaleString("nb-NO")} kr\nBilag: ${data.figures.antall_bilag}`,
+                      );
+                    } catch (err) {
+                      alert(err instanceof Error ? err.message : "Kunne ikke sende inn regnskap.");
+                    }
+                  }}
+                  className="px-5 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs rounded-xl shadow-xs flex items-center space-x-2 cursor-pointer transition-colors"
+                >
+                  <Send className="w-4 h-4" />
+                  <span>Send inn regnskap</span>
+                </button>
+              </div>
+
+              {/* Seksjon 2B: SAF-T Regnskapseksport */}
               <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-xs flex items-center justify-between">
                 <div className="space-y-1">
                   <h4 className="font-bold text-slate-900 text-sm flex items-center space-x-2">
@@ -2780,58 +2869,128 @@ export default function AccountingWorkspace() {
           {activeTab === "settings" && (
             <div className="max-w-3xl mx-auto space-y-6">
               <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-xs space-y-4">
-                <h3 className="font-bold text-slate-900 text-base">Bedriftsprofil & Innstillinger</h3>
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <div>
+                    <h3 className="font-bold text-slate-900 text-base">Bedriftsprofil &amp; Innstillinger</h3>
+                    <p className="text-xs text-slate-500">
+                      {currentUser?.is_admin
+                        ? "Du er innlogget som Administrator og har full rettighet til å redigere innstillinger og kundeprofiler."
+                        : "Låst etter registrering — kun Administrator kan endre opplysningene dine."}
+                    </p>
+                  </div>
+                  {!currentUser?.is_admin && (
+                    <span className="rounded-full bg-amber-100 border border-amber-300 px-3 py-1 text-[11px] font-bold text-amber-900">
+                      🔒 Låst for kunde
+                    </span>
+                  )}
+                </div>
+
+                {!currentUser?.is_admin && (
+                  <div className="rounded-xl border border-amber-200 bg-amber-50 p-3.5 text-xs text-amber-950">
+                    Alle opplysninger fylles inn ved registrering og låses deretter av hensyn til regnskapssikkerhet.
+                    Trenger du å endre noe i profilen din? Klikk knappen under for å sende endringsforespørsel til{" "}
+                    <strong>Administrator (150 kr eks. MVA)</strong>.
+                  </div>
+                )}
+
                 <div className="grid grid-cols-2 gap-4 text-xs">
                   <div>
                     <label className="block text-slate-500 font-semibold mb-1">Selskapsnavn</label>
                     <input
                       type="text"
+                      disabled={!currentUser?.is_admin}
                       value={companySettings.company_name}
                       onChange={e => setCompanySettings({ ...companySettings, company_name: e.target.value })}
-                      className="w-full px-3 py-2 bg-white border border-slate-200 rounded-lg"
+                      className="w-full px-3 py-2 bg-white border border-slate-200 rounded-lg disabled:bg-slate-100 disabled:text-slate-500 disabled:cursor-not-allowed"
                     />
                   </div>
                   <div>
                     <label className="block text-slate-500 font-semibold mb-1">Organisasjonsnummer</label>
                     <input
                       type="text"
+                      disabled={!currentUser?.is_admin}
                       value={companySettings.org_number}
                       onChange={e => setCompanySettings({ ...companySettings, org_number: e.target.value })}
-                      className="w-full px-3 py-2 bg-white border border-slate-200 rounded-lg"
+                      className="w-full px-3 py-2 bg-white border border-slate-200 rounded-lg disabled:bg-slate-100 disabled:text-slate-500 disabled:cursor-not-allowed"
                     />
                   </div>
                   <div>
                     <label className="block text-slate-500 font-semibold mb-1">Driftskonto (Bankkontonummer)</label>
                     <input
                       type="text"
+                      disabled={!currentUser?.is_admin}
                       value={companySettings.bank_account}
                       onChange={e => setCompanySettings({ ...companySettings, bank_account: e.target.value })}
-                      className="w-full px-3 py-2 bg-white border border-slate-200 rounded-lg"
+                      className="w-full px-3 py-2 bg-white border border-slate-200 rounded-lg disabled:bg-slate-100 disabled:text-slate-500 disabled:cursor-not-allowed"
                     />
                   </div>
                   <div>
                     <label className="block text-slate-500 font-semibold mb-1">E-postadresse</label>
                     <input
                       type="email"
+                      disabled={!currentUser?.is_admin}
                       value={companySettings.email}
                       onChange={e => setCompanySettings({ ...companySettings, email: e.target.value })}
-                      className="w-full px-3 py-2 bg-white border border-slate-200 rounded-lg"
+                      className="w-full px-3 py-2 bg-white border border-slate-200 rounded-lg disabled:bg-slate-100 disabled:text-slate-500 disabled:cursor-not-allowed"
                     />
                   </div>
                 </div>
-                <button
-                  onClick={async () => {
-                    await fetch(`${API_BASE}/accounting/settings`, {
-                      method: "POST",
-                      headers: { "Content-Type": "application/json" },
-                      body: JSON.stringify(companySettings)
-                    });
-                    alert("Innstillinger lagret!");
-                  }}
-                  className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-xs font-semibold cursor-pointer"
-                >
-                  Lagre innstillinger
-                </button>
+
+                {currentUser?.is_admin ? (
+                  <div className="flex flex-wrap items-center gap-3 pt-2">
+                    <button
+                      onClick={async () => {
+                        const token = localStorage.getItem("phink_token") || "";
+                        const res = await fetch(`${API_BASE}/accounting/settings`, {
+                          method: "POST",
+                          headers: {
+                            "Content-Type": "application/json",
+                            Authorization: `Bearer ${token}`,
+                          },
+                          body: JSON.stringify(companySettings),
+                        });
+                        const data = await res.json().catch(() => ({}));
+                        if (!res.ok) {
+                          alert(data.detail || "Kunne ikke lagre innstillinger.");
+                          return;
+                        }
+                        alert("Innstillinger lagret av Administrator!");
+                      }}
+                      className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-xs font-semibold cursor-pointer"
+                    >
+                      Lagre innstillinger (Administrator)
+                    </button>
+                    <button
+                      onClick={() => setShowProfileModal(true)}
+                      className="px-4 py-2 bg-slate-900 hover:bg-slate-800 text-white rounded-lg text-xs font-semibold cursor-pointer"
+                    >
+                      Rediger kundeprofiler (0 kr)
+                    </button>
+                    <button
+                      onClick={async () => {
+                        if (!window.confirm("Nullstille alle bilag, fakturaer og demoposter slik at regnskapet blir 100 % blankt for SAF-T import?")) return;
+                        const token = localStorage.getItem("phink_token") || "";
+                        const res = await fetch(`${API_BASE}/accounting/admin/reset-accounting`, {
+                          method: "POST",
+                          headers: { Authorization: `Bearer ${token}` },
+                        });
+                        const data = await res.json().catch(() => ({}));
+                        alert(data.message || data.detail || "Ferdig!");
+                        void fetchAllData();
+                      }}
+                      className="px-4 py-2 bg-red-600 hover:bg-red-700 text-white rounded-lg text-xs font-semibold cursor-pointer"
+                    >
+                      Nullstill regnskap (klar for SAF-T import)
+                    </button>
+                  </div>
+                ) : (
+                  <button
+                    onClick={() => setShowProfileModal(true)}
+                    className="px-4 py-2.5 bg-amber-600 hover:bg-amber-700 text-white rounded-xl text-xs font-bold cursor-pointer"
+                  >
+                    Be Administrator endre profil (150 kr eks. MVA)
+                  </button>
+                )}
               </div>
             </div>
           )}
@@ -2857,7 +3016,12 @@ export default function AccountingWorkspace() {
           )}
 
           {activeTab === "saft" && (
-            <ArchiveSaftCompliancePanel apiBase={API_BASE} mode="saft" onImported={() => void fetchAllData()} />
+            <ArchiveSaftCompliancePanel
+              apiBase={API_BASE}
+              mode="saft"
+              onImported={() => void fetchAllData()}
+              onOpenOpeningBalance={() => setShowOpeningBalanceModal(true)}
+            />
           )}
 
           {activeTab === "compliance" && (
@@ -2865,6 +3029,14 @@ export default function AccountingWorkspace() {
           )}
         </div>
       </main>
+
+      {showOpeningBalanceModal && (
+        <OpeningBalanceModal
+          apiBase={API_BASE}
+          onClose={() => setShowOpeningBalanceModal(false)}
+          onImported={() => void fetchAllData()}
+        />
+      )}
 
       {showProfileModal && currentUser && (
         <ProfileModal

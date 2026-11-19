@@ -1,7 +1,7 @@
 "use client";
 
-import React, { useState } from "react";
-import { CheckCircle, Receipt, ShieldCheck, Smartphone, X } from "lucide-react";
+import React, { useEffect, useState } from "react";
+import { CheckCircle, Lock, Receipt, ShieldCheck, Smartphone, X } from "lucide-react";
 import type { AuthUser } from "./AuthModal";
 
 const ENTITY_OPTIONS: Array<{ value: AuthUser["entity_type"]; label: string }> = [
@@ -34,6 +34,30 @@ export default function ProfileModal({
   const [success, setSuccess] = useState<string | null>(null);
 
   const isAdmin = Boolean(user.is_admin);
+  const [allUsers, setAllUsers] = useState<AuthUser[]>([]);
+  const [targetUserId, setTargetUserId] = useState<number>(user.id);
+
+  useEffect(() => {
+    if (!isAdmin) return;
+    fetch(`${apiBase}/auth/users`)
+      .then((r) => (r.ok ? r.json() : []))
+      .then((list) => {
+        if (Array.isArray(list)) setAllUsers(list);
+      })
+      .catch(() => undefined);
+  }, [apiBase, isAdmin]);
+
+  function selectTargetUser(id: number) {
+    setTargetUserId(id);
+    const found = allUsers.find((u) => u.id === id);
+    if (found) {
+      setFullName(found.full_name || "");
+      setCompanyName(found.company_name || "");
+      setEntityType(found.entity_type || "AS");
+      setOrgNumber(found.org_number || "");
+      setNationalId("");
+    }
+  }
 
   async function handleSave(e: React.FormEvent) {
     e.preventDefault();
@@ -55,12 +79,15 @@ export default function ProfileModal({
           org_number: orgNumber.trim() || null,
           national_id: nationalId.trim() || null,
           payment_method: paymentMethod,
+          target_user_id: isAdmin ? targetUserId : undefined,
         }),
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.detail || "Kunne ikke oppdatere profilen.");
       setSuccess(data.message);
-      if (data.user) onUpdated(data.user);
+      if (data.user && !data.pending_admin_approval && data.user.id === user.id) {
+        onUpdated(data.user);
+      }
     } catch (err) {
       setError(err instanceof Error ? err.message : "Feil ved oppdatering.");
     } finally {
@@ -75,11 +102,13 @@ export default function ProfileModal({
           <div className="flex items-center gap-2.5">
             <ShieldCheck className="w-5 h-5 text-blue-600" />
             <div>
-              <h3 className="font-bold text-slate-900 text-sm">Endre profil (Kunde / Administrator)</h3>
+              <h3 className="font-bold text-slate-900 text-sm">
+                {isAdmin ? "Administrator — Rediger bruker-/kundeprofil" : "Be Administrator om profilendring (150 kr)"}
+              </h3>
               <p className="text-[11px] text-slate-500">
                 {isAdmin
-                  ? "Administrator: Gratis profilendring (0 kr)"
-                  : "Profilendring ved korrigering av feil: 150 kr eks. MVA (187,50 kr inkl. MVA)"}
+                  ? "Kun Administrator kan endre låste profiler (0 kr)"
+                  : "Profilen er låst etter registrering. Send endringsforespørsel til Administrator (150 kr eks. MVA)."}
               </p>
             </div>
           </div>
@@ -89,6 +118,32 @@ export default function ProfileModal({
         </div>
 
         <form onSubmit={handleSave} className="p-6 space-y-4 text-xs">
+          {isAdmin && allUsers.length > 0 && (
+            <div className="rounded-xl border border-blue-200 bg-blue-50 p-3">
+              <label className="block font-bold text-blue-900 mb-1">Velg hvilken bruker/kunde du vil redigere:</label>
+              <select
+                value={targetUserId}
+                onChange={(e) => selectTargetUser(Number(e.target.value))}
+                className="w-full rounded-lg border border-blue-300 bg-white px-3 py-2 text-slate-900"
+              >
+                {allUsers.map((u) => (
+                  <option key={u.id} value={u.id}>
+                    {u.email} — {u.company_name || u.full_name} ({u.entity_type})
+                  </option>
+                ))}
+              </select>
+            </div>
+          )}
+
+          {!isAdmin && (
+            <div className="rounded-xl border border-slate-200 bg-slate-50 p-3 flex items-start gap-2 text-slate-700">
+              <Lock className="w-4 h-4 text-amber-600 shrink-0 mt-0.5" />
+              <span>
+                Profilen din er låst etter første registrering. Fyll ut hva som skal rettes under — forespørselen sendes
+                til Administrator sammen med endringsgebyret (150 kr eks. MVA).
+              </span>
+            </div>
+          )}
           <div>
             <label className="block font-semibold text-slate-700 mb-1">Kontotype / Selskapsform</label>
             <select
@@ -195,7 +250,11 @@ export default function ProfileModal({
               disabled={busy}
               className="rounded-xl bg-blue-600 hover:bg-blue-700 px-5 py-2 font-bold text-white disabled:opacity-50 cursor-pointer"
             >
-              {busy ? "Lagrer…" : isAdmin ? "Lagre profilendring (0 kr)" : "Lagre profilendring (150 kr)"}
+              {busy
+                ? "Sender…"
+                : isAdmin
+                  ? "Lagre profilendring som Administrator (0 kr)"
+                  : "Send forespørsel til Administrator (150 kr)"}
             </button>
           </div>
         </form>

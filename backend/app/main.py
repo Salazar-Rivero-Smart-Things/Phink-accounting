@@ -26,15 +26,16 @@ async def lifespan(app: FastAPI):
     Base.metadata.create_all(bind=engine)
     ensure_schema_migrations()
     
-    # Kjøring av seeder
+    # Kjøring av seeder (sett SEED_DEMO_DATA=false i produksjon for helt blankt regnskap klart til SAF-T import)
     db = SessionLocal()
     try:
         seed_default_accounts(db)
         seed_default_dimensions(db)
         seed_default_owner(db)
-        seed_demo_employees(db)
-        seed_enterprise_demo_data(db)
-        seed_demo_support_cases(db)
+        if os.getenv("SEED_DEMO_DATA", "false").lower() == "true":
+            seed_demo_employees(db)
+            seed_enterprise_demo_data(db)
+            seed_demo_support_cases(db)
     finally:
         db.close()
     yield

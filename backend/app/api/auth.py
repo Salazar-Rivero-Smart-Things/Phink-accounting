@@ -11,7 +11,7 @@ import secrets
 
 from app.config import settings
 from app.database import get_db
-from app.models.accounting import User, CompanySetting, AuditLog, SubscriptionOrder
+from app.models.accounting import User, CompanySetting, AuditLog, SubscriptionOrder, SupportTicket, TicketMessage
 from datetime import timedelta as _td
 import uuid as _uuid
 
@@ -386,25 +386,109 @@ def update_user_profile(
     if new_entity not in VALID_ENTITY_TYPES:
         raise HTTPException(status_code=400, detail=f"Ugyldig kontotype '{new_entity}'.")
 
+    validated_orgnr = None
     if req.org_number is not None and req.org_number.strip():
         ok, val = validate_norwegian_orgnr(req.org_number)
         if not ok:
             raise HTTPException(status_code=400, detail=val)
-        target.org_number = val
+        validated_orgnr = val
 
+    validated_fnr = None
     if req.national_id is not None and req.national_id.strip():
         ok, val = validate_norwegian_national_id(req.national_id)
         if not ok:
             raise HTTPException(status_code=400, detail=val)
-        target.national_id = val
+        validated_fnr = val
 
+    # VANLIG KUNDE: Profilen er låst etter registrering — kunden sender en betalt forespørsel (150 kr)
+    # direkte til Administrator i Kundeservice Desk, slik at KUN Administrator redigerer profilen!
+    if not actor_is_admin:
+        method = (req.payment_method or "VIPPS_BEDRIFT").strip().upper()
+        if method not in ("VIPPS_BEDRIFT", "FAKTURA"):
+            raise HTTPException(status_code=400, detail="Endringsgebyr (150 kr) kan kun betales med VIPPS_BEDRIFT eller FAKTURA.")
+        setting = db.query(CompanySetting).first()
+        vat_amt = round(PROFILE_CHANGE_FEE_EX_VAT * 0.25, 2)
+        total_inc = round(PROFILE_CHANGE_FEE_EX_VAT + vat_amt, 2)
+        ref = f"PROFIL-{_uuid.uuid4().hex[:6].upper()}"
+        order = SubscriptionOrder(
+            customer_name=target.company_name or target.full_name,
+            customer_email=target.email,
+            org_number=target.org_number,
+            plan_id="PROFILE_CHANGE",
+            plan_name="Forespørsel om profilendring av Administrator (150 kr eks. MVA)",
+            payment_method=method,
+            amount_ex_vat=PROFILE_CHANGE_FEE_EX_VAT,
+            vat_amount=vat_amt,
+            total_amount=total_inc,
+            vipps_number=(setting.vipps_number if setting and method == "VIPPS_BEDRIFT" else None),
+            payment_reference=ref,
+            status="INVOICE_SENT" if method == "FAKTURA" else "PENDING",
+            due_date=datetime.utcnow() + _td(days=14),
+        )
+        db.add(order)
+
+        # Opprett kundeservice-sak til Administrator med de ønskede endringene
+        change_summary = (
+            f"Kunde {target.email} ber Administrator om å endre låst profil (Gebyr: 150 kr eks. MVA / {total_inc:.2f} kr inkl. MVA via {method}, Ref: {ref}):\n"
+            f"- Navn: {target.full_name} -> {req.full_name or target.full_name}\n"
+            f"- Firma: {target.company_name} -> {req.company_name or target.company_name}\n"
+            f"- Selskapsform: {target.entity_type} -> {new_entity}\n"
+            f"- Orgnr: {target.org_number or '—'} -> {validated_orgnr or target.org_number or '—'}"
+        )
+        ticket = SupportTicket(
+            customer_name=target.full_name,
+            customer_email=target.email,
+            subject=f"Profilendring (150 kr) — {target.company_name or target.full_name}",
+            category="PROFILE_CHANGE",
+            status="ESCALATED_TO_HUMAN",
+            priority="HIGH",
+            assigned_to="Administrator (Deg)",
+        )
+        db.add(ticket)
+        db.flush()
+        db.add(TicketMessage(
+            ticket_id=ticket.id,
+            sender="CUSTOMER",
+            sender_name=target.full_name,
+            message=change_summary,
+        ))
+        db.add(AuditLog(
+            action="PROFILE_CHANGE_REQUESTED",
+            details=f"Kunde {target.email} sendte forespørsel om profilendring (150 kr, Ref: {ref}, Sak #{ticket.id}).",
+            ai_assisted=False,
+        ))
+        db.commit()
+
+        return {
+            "ok": True,
+            "pending_admin_approval": True,
+            "ticket_id": ticket.id,
+            "user": serialize_user(target),
+            "fee": {
+                "fee_ex_vat": PROFILE_CHANGE_FEE_EX_VAT,
+                "vat_amount": vat_amt,
+                "total_inc_vat": total_inc,
+                "payment_method": method,
+                "payment_reference": ref,
+            },
+            "message": (
+                f"Forespørsel om profilendring er sendt til Administrator (Sak #{ticket.id})! "
+                f"Endringsgebyr: 150 kr eks. MVA ({total_inc:.2f} kr inkl. MVA) via {method} (Ref: {ref}). "
+                f"Kun Administrator kan åpne og oppdatere profilen din."
+            ),
+        }
+
+    # ADMINISTRATOR: Utfører profilendring umiddelbart (0 kr) — på egen eller kundes konto!
+    if validated_orgnr:
+        target.org_number = validated_orgnr
+    if validated_fnr:
+        target.national_id = validated_fnr
     if req.full_name and req.full_name.strip():
         target.full_name = req.full_name.strip()
     if req.company_name and req.company_name.strip():
         target.company_name = req.company_name.strip()
     target.entity_type = new_entity
 
-    # Synkroniser bedriftsinnstillinger hvis dette er aktiv bruker
     setting = db.query(CompanySetting).first()
     if setting and target.id == actor.id:
         if target.company_name:
@@ -416,40 +500,9 @@ def update_user_profile(
             setting.national_id = target.national_id
 
     fee_info = {"fee_ex_vat": 0.0, "vat_amount": 0.0, "total_inc_vat": 0.0, "payment_reference": "ADMIN-FREE"}
-    if not actor_is_admin:
-        method = (req.payment_method or "VIPPS_BEDRIFT").strip().upper()
-        if method not in ("VIPPS_BEDRIFT", "FAKTURA"):
-            raise HTTPException(status_code=400, detail="Endringsgebyr (150 kr) kan kun betales med VIPPS_BEDRIFT eller FAKTURA.")
-        vat_amt = round(PROFILE_CHANGE_FEE_EX_VAT * 0.25, 2)
-        total_inc = round(PROFILE_CHANGE_FEE_EX_VAT + vat_amt, 2)
-        ref = f"PROFIL-{_uuid.uuid4().hex[:6].upper()}"
-        order = SubscriptionOrder(
-            customer_name=target.company_name or target.full_name,
-            customer_email=target.email,
-            org_number=target.org_number,
-            plan_id="PROFILE_CHANGE",
-            plan_name="Endring av bruker-/firmaprofil (150 kr eks. MVA)",
-            payment_method=method,
-            amount_ex_vat=PROFILE_CHANGE_FEE_EX_VAT,
-            vat_amount=vat_amt,
-            total_amount=total_inc,
-            vipps_number=(setting.vipps_number if setting and method == "VIPPS_BEDRIFT" else None),
-            payment_reference=ref,
-            status="INVOICE_SENT" if method == "FAKTURA" else "PENDING",
-            due_date=datetime.utcnow() + _td(days=14),
-        )
-        db.add(order)
-        fee_info = {
-            "fee_ex_vat": PROFILE_CHANGE_FEE_EX_VAT,
-            "vat_amount": vat_amt,
-            "total_inc_vat": total_inc,
-            "payment_method": method,
-            "payment_reference": ref,
-        }
-
     db.add(AuditLog(
-        action="PROFILE_UPDATED",
-        details=f"Profil oppdatert for {target.email} av {actor.email} (Gebyr: {fee_info['fee_ex_vat']} kr eks. MVA).",
+        action="PROFILE_UPDATED_BY_ADMIN",
+        details=f"Administrator ({actor.email}) oppdaterte profilen til {target.email} (0 kr).",
         ai_assisted=False,
     ))
     db.commit()
@@ -457,11 +510,8 @@ def update_user_profile(
 
     return {
         "ok": True,
+        "pending_admin_approval": False,
         "user": serialize_user(target),
         "fee": fee_info,
-        "message": (
-            "Profil oppdatert (Administrator: 0 kr)."
-            if actor_is_admin
-            else f"Profil oppdatert! Endringsgebyr på 150 kr eks. MVA ({fee_info['total_inc_vat']:.2f} kr inkl. MVA) er registrert via {fee_info['payment_method']} (Ref: {fee_info['payment_reference']})."
-        ),
+        "message": f"Administrator oppdaterte profilen for {target.email} (0 kr).",
     }
